@@ -351,8 +351,18 @@ class Kwad:
             return 0
 
         rpm = self.get_max_rpm()
-        pitch_m = self.prop[0].pitch * 0.0254
-        return (rpm * pitch_m) / 60
+
+        # pitch in inches → distance traveled per revolution
+        pitch_in_inches = self.prop[0].pitch
+
+        # m/s
+        mps = (rpm * (pitch_in_inches * 0.0254)) / 60
+
+        # convert m/s → mph
+        mph = mps * 2.23694
+
+        return mph
+
 
     def get_expected_Cooldown_time(self):
         max_current = self.get_max_current()
