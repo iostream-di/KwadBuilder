@@ -192,27 +192,40 @@ class Kwad:
     def get_component_compatibility(self):
         issues = []
 
-        # motor mounting pattern vs frame motor pattern
+        # If no frame, nothing else can be checked
+        if not self.frame:
+            return ["No frame selected"]
+
+        # Motor mounting pattern
         for m in self.motors:
-            if m.mountingPattern != self.frame.motor_mountingPattern:
+            if m and m.mountingPattern != self.frame.motor_mountingPattern:
                 issues.append(f"Motor {m.model} mounting pattern mismatch with frame.")
 
-        # prop mount type vs motor prop mount type
+        # Prop mount type
         for p, m in zip(self.prop, self.motors):
-            if p.propMountType != m.propMountType:
+            if p and m and p.propMountType != m.propMountType:
                 issues.append(f"Prop {p.model} mount type mismatch with motor {m.model}.")
 
-        # FC / ESC / AIO mounting patterns vs frame
-        if self.fc and self.fc.mountingPattern != self.frame.fc_mountingPattern:
-            issues.append("FC mounting pattern mismatch with frame.")
+        # FC
+        if self.fc:
+            if hasattr(self.fc, "mountingPattern") and \
+            self.fc.mountingPattern != self.frame.fc_mountingPattern:
+                issues.append("FC mounting pattern mismatch with frame.")
 
-        if self.esc and self.esc.mountingPattern != self.frame.esc_mountingPattern:
-            issues.append("ESC mounting pattern mismatch with frame.")
+        # ESC
+        if self.esc:
+            if hasattr(self.esc, "mountingPattern") and \
+            self.esc.mountingPattern != self.frame.esc_mountingPattern:
+                issues.append("ESC mounting pattern mismatch with frame.")
 
-        if self.aio and self.aio.esc.mountingPattern != self.frame.aio_mountingPattern:
-            issues.append("AIO mounting pattern mismatch with frame.")
+        # AIO
+        if self.aio:
+            if hasattr(self.aio.esc, "mountingPattern") and \
+            self.aio.esc.mountingPattern != self.frame.aio_mountingPattern:
+                issues.append("AIO mounting pattern mismatch with frame.")
 
         return issues if issues else ["OK"]
+
 
 
     # returns the sum of each component's cost.
