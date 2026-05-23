@@ -41,8 +41,13 @@ def edit_component(label, cls, defaults=None, extra_fields=None, list_mode=False
         st.session_state.components[label] = st.session_state.components[label][:count]
 
         for i in range(count):
-            with st.expander(f"{label} #{i+1}"):
-                st.session_state.components[label][i] = build_component_ui(cls, f"{label}_{i}", defaults, extra_fields)
+            if i >= len(st.session_state.components[label]):
+                st.session_state.components[label].append(None)
+
+        st.session_state.components[label][i] = build_component_ui(
+            cls, f"{label}_{i}", defaults, extra_fields
+        )
+
 
     else:
         st.session_state.components[label] = build_component_ui(cls, label, defaults, extra_fields)
