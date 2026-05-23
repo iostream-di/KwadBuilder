@@ -167,62 +167,84 @@ edit_component(
     ],
 )
 
-edit_component(
-    "esc",
-    ESC,
-    extra_fields=[
-        ("maxCurrent", float, 0.0),
-        ("vin", float, 0.0),
-        ("mountingPattern", str, ""),
-    ],
-)
+# -------------------------
+# AIO OR FC + ESC
+# -------------------------
+use_aio = st.checkbox("Use AIO instead of FC + ESC", value=False)
 
-edit_component("fc", FC)
+if use_aio:
+    edit_component(
+        "aio",
+        AIO,
+        extra_fields=[
+            ("maxCurrent", float, 0.0),
+            ("vin", float, 0.0),
+            ("mountingPattern", str, ""),
+        ],
+    )
+    st.session_state.components["fc"] = None
+    st.session_state.components["esc"] = None
+else:
+    edit_component("fc", FC)
+    edit_component(
+        "esc",
+        ESC,
+        extra_fields=[
+            ("maxCurrent", float, 0.0),
+            ("vin", float, 0.0),
+            ("mountingPattern", str, ""),
+        ],
+    )
+    st.session_state.components["aio"] = None
 
-edit_component(
-    "aio",
-    AIO,
-    extra_fields=[
-        ("maxCurrent", float, 0.0),
-        ("vin", float, 0.0),
-        ("mountingPattern", str, ""),
-    ],
-)
+# -------------------------
+# OPTIONAL COMPONENTS
+# -------------------------
 
+# RX
+use_rx = st.checkbox("Include RX?", value=False)
+if use_rx:
+    edit_component("rx", RX)
+    edit_component("rx_ant", ANT)
+else:
+    st.session_state.components["rx"] = None
+    st.session_state.components["rx_ant"] = None
+
+# VTX
+use_vtx = st.checkbox("Include VTX?", value=False)
+if use_vtx:
+    edit_component(
+        "vtx",
+        VTX,
+        extra_fields=[
+            ("mountingPattern", str, ""),
+            ("currentPull", float, 0.0),
+            ("vin", float, 0.0),
+        ],
+    )
+    edit_component("vtx_ant", ANT)
+else:
+    st.session_state.components["vtx"] = None
+    st.session_state.components["vtx_ant"] = None
+
+# CAP
+use_cap = st.checkbox("Include Capacitor?", value=False)
+if use_cap:
+    edit_component(
+        "cap",
+        CAP,
+        extra_fields=[
+            ("maxVoltage", float, 0.0),
+            ("microFarad", float, 0.0),
+        ],
+    )
+else:
+    st.session_state.components["cap"] = None
+
+# Always optional
 edit_component("gps", GPS)
-edit_component("rx", RX)
-edit_component("rx_ant", ANT)
-
-edit_component(
-    "vtx",
-    VTX,
-    extra_fields=[
-        ("mountingPattern", str, ""),
-        ("currentPull", float, 0.0),
-        ("vin", float, 0.0),
-    ],
-)
-
-edit_component("vtx_ant", ANT)
-
-edit_component(
-    "cam",
-    CAM,
-    extra_fields=[
-        ("mountingPattern", str, ""),
-    ],
-)
-
+edit_component("cam", CAM, extra_fields=[("mountingPattern", str, "")])
 edit_component("actionCam", ActionCAM)
-
-edit_component(
-    "cap",
-    CAP,
-    extra_fields=[
-        ("maxVoltage", float, 0.0),
-        ("microFarad", float, 0.0),
-    ],
-)
 
 edit_component(
     "lipo",
@@ -250,8 +272,8 @@ if st.button("Check"):
     motor = st.session_state.components["motor"]
     prop = st.session_state.components["prop"]
 
-    motors = [motor] * 4 if motor is not None else []
-    props = [prop] * 4 if prop is not None else []
+    motors = [motor] * 4 if motor else []
+    props = [prop] * 4 if prop else []
 
     kwad = Kwad(
         model,
