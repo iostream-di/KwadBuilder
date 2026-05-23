@@ -18,7 +18,7 @@ from kwad import (
     Kwad,
 )
 
-st.title("FPV Kwad Builder (Quad Only)")
+st.title("Marty's FPV Kwad Builder")
 
 # -------------------------
 # SESSION STATE INIT
@@ -320,7 +320,7 @@ if st.button("Check"):
     st.write("Max RPM:", kwad.maxRPM)
     st.write("Max Current (A):", kwad.maxCurrent)
     st.write("Expected Flight Time (s):", kwad.expectedFlightTime)
-    st.write("Max Speed (m/s):", kwad.maxSpeed)
+    st.write("Max Speed (MPH):", kwad.maxSpeed)
     st.write("Expected Cooldown Time (s):", kwad.expectedCooldownTime)
     st.write("Grade Rating:", kwad.gradeRating)
     st.write("Compatibility:", kwad.compatibility)
