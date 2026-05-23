@@ -49,6 +49,8 @@ def edit_component(label, cls, defaults=None, extra_fields=None, list_mode=False
 
 
 def build_component_ui(cls, key_prefix, defaults, extra_fields):
+    defaults = defaults or {}
+
     manufacturer = st.text_input(f"{key_prefix} Manufacturer", defaults.get("manufacturer", ""), key=f"{key_prefix}_man")
     model = st.text_input(f"{key_prefix} Model", defaults.get("model", ""), key=f"{key_prefix}_model")
     partNumber = st.text_input(f"{key_prefix} Part Number", defaults.get("partNumber", ""), key=f"{key_prefix}_pn")
@@ -65,9 +67,12 @@ def build_component_ui(cls, key_prefix, defaults, extra_fields):
                 val = st.number_input(f"{key_prefix} {field_name}", 0.0, 99999.0, default, key=f"{key_prefix}_{field_name}")
             elif field_type == str:
                 val = st.text_input(f"{key_prefix} {field_name}", default, key=f"{key_prefix}_{field_name}")
+            elif field_type == bool:
+                val = st.checkbox(f"{key_prefix} {field_name}", default, key=f"{key_prefix}_{field_name}")
             values.append(val)
 
     return cls(*values)
+
 
 
 # -------------------------
