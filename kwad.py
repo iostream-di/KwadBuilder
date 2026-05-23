@@ -88,6 +88,7 @@ class LIPO(Component):
         self.capacity = capacity
         self.cRating = cRating 
         self.contype = conType
+        self.hv = hv
         if self.hv == True:
             self.s1 = 4.35
         else:

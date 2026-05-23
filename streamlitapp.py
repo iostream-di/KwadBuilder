@@ -69,6 +69,7 @@ def build_component_ui(cls, key_prefix, defaults, extra_fields):
                 val = st.text_input(f"{key_prefix} {field_name}", default, key=f"{key_prefix}_{field_name}")
             elif field_type == bool:
                 val = st.checkbox(f"{key_prefix} {field_name}", default, key=f"{key_prefix}_{field_name}")
+
             values.append(val)
 
     return cls(*values)
