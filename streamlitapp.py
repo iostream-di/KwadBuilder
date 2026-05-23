@@ -241,11 +241,24 @@ if use_cap:
 else:
     st.session_state.components["cap"] = None
 
-# Always optional
-edit_component("gps", GPS)
-edit_component("cam", CAM, extra_fields=[("mountingPattern", str, "")])
-edit_component("actionCam", ActionCAM)
+# GPS
+use_gps = st.checkbox("Include GPS?", value=False)
+if use_gps:
+    edit_component("gps", GPS)
+else:
+    st.session_state.components["gps"] = None
 
+# Action Camera
+use_actioncam = st.checkbox("Include Action Camera?", value=False)
+if use_actioncam:
+    edit_component("actionCam", ActionCAM)
+else:
+    st.session_state.components["actionCam"] = None
+
+# FPV Camera (always optional but no toggle needed)
+edit_component("cam", CAM, extra_fields=[("mountingPattern", str, "")])
+
+# LIPO (always required)
 edit_component(
     "lipo",
     LIPO,
@@ -257,6 +270,7 @@ edit_component(
         ("hv", bool, False),
     ],
 )
+
 
 # -------------------------
 # BUILD & CHECK
