@@ -1,326 +1,288 @@
 import streamlit as st
-from kwad import (
-    Component,
-    Motor,
-    Propeller,
-    Frame,
-    VTX,
-    FC,
-    ESC,
-    AIO,
-    RX,
-    GPS,
-    CAM,
-    ANT,
-    LIPO,
-    CAP,
-    ActionCAM,
-    Kwad,
+import math
+
+st.set_page_config(page_title="Theoretical FPV Build Explorer", layout="centered")
+
+st.title("Theoretical FPV Build Explorer")
+st.write("Play with sliders to get a **feel** for how a build might behave.")
+
+
+# -----------------------------
+# Helper functions (toy models)
+# -----------------------------
+
+def nominal_voltage(s_cells: int) -> float:
+    return 3.8 * s_cells  # nominal per-cell voltage
+
+
+def rpm_no_load(kv: float, voltage: float) -> float:
+    return kv * voltage
+
+
+def rpm_loaded(no_load_rpm: float) -> float:
+    return no_load_rpm * 0.78  # 78% of no-load as a rough average
+
+
+def prop_disk_area(diameter_in: float) -> float:
+    # diameter in inches → meters
+    d_m = diameter_in * 0.0254
+    r_m = d_m / 2
+    return math.pi * r_m * r_m
+
+
+def pitch_speed_mps(pitch_in: float, rpm: float) -> float:
+    # pitch in inches, rpm → m/s
+    # pitch speed (m/s) ≈ pitch(in) * 0.0254 * rpm / 60
+    return pitch_in * 0.0254 * rpm / 60.0
+
+
+def estimate_thrust_per_motor_g(diameter_in, pitch_in, blades, rpm, stator_d, stator_h):
+    """
+    Very rough heuristic thrust model.
+    Scales with prop area, pitch, blades, rpm, and motor size.
+    Returns grams of thrust per motor.
+    """
+    area = prop_disk_area(diameter_in)
+    motor_factor = (stator_d * stator_h) / (14 * 7)  # normalize vs ~1407
+    blade_factor = 1 + (blades - 2) * 0.12          # more blades = more thrust, less efficiency
+    rpm_factor = (rpm / 40000) ** 0.9               # normalize around 40k rpm
+
+    base = 400  # base thrust in grams for a "typical" 3-4" motor at 40k rpm
+    thrust = base * area / prop_disk_area(3.0)      # scale vs 3" reference
+    thrust *= (pitch_in / 3.0) ** 0.4
+    thrust *= blade_factor
+    thrust *= motor_factor
+    thrust *= rpm_factor
+
+    return max(thrust, 5.0)
+
+
+def estimate_current_per_motor_a(thrust_g: float, efficiency_factor: float = 0.8) -> float:
+    """
+    Toy model: current roughly scales with thrust^1.2.
+    """
+    return (thrust_g / 100.0) ** 1.2 / efficiency_factor
+
+
+def estimate_flight_time_min(capacity_mah, avg_current_a):
+    if avg_current_a <= 0:
+        return 0.0
+    usable_mah = capacity_mah * 0.8  # 80% usable
+    return (usable_mah / 1000.0) / avg_current_a * 60.0
+
+
+def clamp01(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+def heat_from_current(load_current, safe_current):
+    if safe_current <= 0:
+        return 1.0
+    ratio = load_current / safe_current
+    # soft knee: 0.5 → 30%, 1.0 → 70%, 1.5+ → 100%
+    if ratio <= 0.5:
+        return 0.3 * (ratio / 0.5)
+    elif ratio <= 1.0:
+        return 0.3 + 0.4 * ((ratio - 0.5) / 0.5)
+    else:
+        return clamp01(0.7 + 0.3 * ((ratio - 1.0) / 0.5))
+
+
+def build_style_label(twr, flight_time, prop_size, auw):
+    """
+    Very rough classification:
+    - TWR: <2, 2–4, 4–7, >7
+    - Flight time: <3, 3–6, 6–12, >12
+    - Prop size & AUW bias style.
+    """
+    # Aggression from TWR
+    if twr < 2:
+        adjective = "Mild"
+    elif twr < 4:
+        adjective = "Average"
+    elif twr < 7:
+        adjective = "Aggressive"
+    else:
+        adjective = "Extreme"
+
+    # Style from prop size, AUW, and flight time
+    if prop_size <= 2.5 and auw < 80:
+        style = "Whoop"
+    elif prop_size <= 3.5 and auw < 200:
+        style = "Freestyle"
+    elif prop_size <= 4.5 and flight_time > 8:
+        style = "Cinelog"
+    elif prop_size >= 5 and flight_time > 10:
+        style = "Long Range"
+    elif prop_size >= 5 and twr > 6:
+        style = "Racing"
+    else:
+        # fallback based on TWR vs time
+        if flight_time > 10:
+            style = "Long Range"
+        elif twr > 5:
+            style = "Freestyle"
+        else:
+            style = "General Purpose"
+
+    return f"{adjective} {style}"
+
+
+def heat_color(heat_0_1: float) -> str:
+    """
+    Map 0–1 heat to hex color from light blue → yellow → red.
+    """
+    # 0: #7FDBFF (light blue), 0.5: #FFD700 (gold), 1: #FF4136 (red)
+    if heat_0_1 <= 0.5:
+        t = heat_0_1 / 0.5
+        c1 = (0x7F, 0xDB, 0xFF)
+        c2 = (0xFF, 0xD7, 0x00)
+    else:
+        t = (heat_0_1 - 0.5) / 0.5
+        c1 = (0xFF, 0xD7, 0x00)
+        c2 = (0xFF, 0x41, 0x36)
+
+    r = int(c1[0] + (c2[0] - c1[0]) * t)
+    g = int(c1[1] + (c2[1] - c1[1]) * t)
+    b = int(c1[2] + (c2[2] - c1[2]) * t)
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
+# -----------------------------
+# UI – sliders
+# -----------------------------
+
+st.subheader("Build parameters")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    prop_size = st.slider("Prop size (inches)", 1.0, 8.0, 3.0, 0.5)
+    prop_pitch = st.slider("Prop pitch (inches)", 0.8, 8.0, 3.0, 0.1)
+    prop_blades = st.slider("Prop blades", 2, 8, 3, 1)
+    motor_kv = st.slider("Motor KV", 300, 30000, 4000, 50)
+    stator_d = st.slider("Motor stator diameter (mm)", 7, 52, 14, 1)
+    stator_h = st.slider("Motor stator height (mm)", 2, 15, 7, 1)
+
+with col2:
+    lipo_s = st.slider("LiPo cells (S)", 1, 8, 4, 1)
+    lipo_capacity = st.slider("LiPo capacity (mAh)", 260, 20000, 850, 10)
+    lipo_c = st.slider("LiPo C rating", 20, 150, 75, 1)
+    auw = st.slider("All-up weight (g)", 15, 2000, 250, 5)
+    motor_count = st.slider("Motor count", 2, 8, 4, 1)
+
+
+# -----------------------------
+# Computations
+# -----------------------------
+
+V = nominal_voltage(lipo_s)
+rpm_nl = rpm_no_load(motor_kv, V)
+rpm_ld = rpm_loaded(rpm_nl)
+
+thrust_per_motor_g = estimate_thrust_per_motor_g(
+    prop_size, prop_pitch, prop_blades, rpm_ld, stator_d, stator_h
 )
+total_thrust_g = thrust_per_motor_g * motor_count
+twr = total_thrust_g / auw if auw > 0 else 0.0
 
-st.title("Marty's FPV Kwad Builder")
+# Max payload where TWR ~ 2 (still flyable)
+max_payload_g = max(total_thrust_g / 2.0 - auw, 0.0)
 
-# -------------------------
-# SESSION STATE INIT
-# -------------------------
-if "components" not in st.session_state:
-    st.session_state.components = {
-        "frame": None,
-        "motor": None,
-        "prop": None,
-        "esc": None,
-        "fc": None,
-        "aio": None,
-        "gps": None,
-        "rx": None,
-        "rx_ant": None,
-        "vtx": None,
-        "vtx_ant": None,
-        "cam": None,
-        "actionCam": None,
-        "cap": None,
-        "lipo": None,
-    }
+# Max speed from pitch speed
+max_speed_mps = pitch_speed_mps(prop_pitch, rpm_ld)
+max_speed_kph = max_speed_mps * 3.6
 
+# Current draw estimates
+current_per_motor_a = estimate_current_per_motor_a(thrust_per_motor_g)
+total_current_a = current_per_motor_a * motor_count
 
-# -------------------------
-# UI HELPERS
-# -------------------------
-def build_component_ui(cls, key_prefix, defaults=None, extra_fields=None):
-    defaults = defaults or {}
+# Assume cruise at ~35% of max current
+cruise_current_a = total_current_a * 0.35
+flight_time_min = estimate_flight_time_min(lipo_capacity, cruise_current_a)
 
-    manufacturer = st.text_input(
-        f"{key_prefix} Manufacturer",
-        defaults.get("manufacturer", ""),
-        key=f"{key_prefix}_man",
-    )
-    model = st.text_input(
-        f"{key_prefix} Model",
-        defaults.get("model", ""),
-        key=f"{key_prefix}_model",
-    )
-    partNumber = st.text_input(
-        f"{key_prefix} Part Number",
-        defaults.get("partNumber", ""),
-        key=f"{key_prefix}_pn",
-    )
-    weight = st.number_input(
-        f"{key_prefix} Weight (g)",
-        0.0,
-        2000.0,
-        defaults.get("weight", 0.0),
-        key=f"{key_prefix}_w",
-    )
-    cost = st.number_input(
-        f"{key_prefix} Cost ($)",
-        0.0,
-        1000.0,
-        defaults.get("cost", 0.0),
-        key=f"{key_prefix}_c",
-    )
+# Battery safe current
+battery_safe_a = (lipo_capacity / 1000.0) * lipo_c
 
-    values = [manufacturer, model, partNumber, weight, cost]
+# Heat potentials
+fc_heat = clamp01(0.1 + 0.2 * (lipo_s - 1) / 7 + 0.2 * (motor_kv / 30000))
+esc_safe_a = battery_safe_a / motor_count
+esc_heat = heat_from_current(current_per_motor_a, esc_safe_a)
+motor_heat = heat_from_current(current_per_motor_a, 25.0)  # assume 25A "comfortable"
+desync_potential = clamp01(0.2 + 0.4 * (motor_kv / 30000) + 0.2 * (prop_pitch / 8.0))
 
-    if extra_fields:
-        for field_name, field_type, default in extra_fields:
-            if field_type == int:
-                val = st.number_input(
-                    f"{key_prefix} {field_name}",
-                    0,
-                    99999,
-                    default,
-                    key=f"{key_prefix}_{field_name}",
-                )
-            elif field_type == float:
-                val = st.number_input(
-                    f"{key_prefix} {field_name}",
-                    0.0,
-                    99999.0,
-                    default,
-                    key=f"{key_prefix}_{field_name}",
-                )
-            elif field_type == str:
-                val = st.text_input(
-                    f"{key_prefix} {field_name}",
-                    default,
-                    key=f"{key_prefix}_{field_name}",
-                )
-            elif field_type == bool:
-                val = st.checkbox(
-                    f"{key_prefix} {field_name}",
-                    default,
-                    key=f"{key_prefix}_{field_name}",
-                )
-            values.append(val)
+overall_heat = clamp01((fc_heat + esc_heat + motor_heat + desync_potential) / 4.0)
 
-    return cls(*values)
+# -----------------------------
+# Output
+# -----------------------------
+
+st.subheader("Theoretical metrics")
+
+colA, colB = st.columns(2)
+
+with colA:
+    st.metric("Max speed", f"{max_speed_kph:0.1f} km/h")
+    st.metric("Total max thrust", f"{total_thrust_g:0.0f} g")
+    st.metric("Thrust-to-weight ratio", f"{twr:0.2f} : 1")
+    st.metric("Max payload (TWR≈2)", f"{max_payload_g:0.0f} g")
+
+with colB:
+    st.metric("Total max current", f"{total_current_a:0.1f} A")
+    st.metric("Cruise current (est.)", f"{cruise_current_a:0.1f} A")
+    st.metric("Battery safe current", f"{battery_safe_a:0.1f} A")
+    st.metric("Expected flight time", f"{flight_time_min:0.1f} min")
 
 
-def edit_component(label, cls, defaults=None, extra_fields=None):
-    with st.expander(label, expanded=False):
-        st.session_state.components[label] = build_component_ui(
-            cls, label, defaults, extra_fields
-        )
+st.subheader("Thermal & reliability potentials")
+
+colH1, colH2, colH3, colH4 = st.columns(4)
+
+colH1.metric("FC overheat potential", f"{fc_heat * 100:0.0f} %")
+colH2.metric("ESC overheat potential", f"{esc_heat * 100:0.0f} %")
+colH3.metric("Motor overheat potential", f"{motor_heat * 100:0.0f} %")
+colH4.metric("Motor desync potential", f"{desync_potential * 100:0.0f} %")
 
 
-# -------------------------
-# COMPONENT EDITORS
-# -------------------------
-edit_component(
-    "frame",
-    Frame,
-    extra_fields=[
-        ("fc_mountingPattern", str, ""),
-        ("esc_mountingPattern", str, ""),
-        ("aio_mountingPattern", str, ""),
-        ("motor_mountingPattern", str, ""),
-        ("vtx_mountingPattern", str, ""),
-        ("cam_mountingPattern", str, ""),
-        ("propDiameterClearance", float, 0.0),
-        ("armThickness", float, 0.0),
-        ("frameThickness", float, 0.0),
-        ("style", str, "True X"),
-    ],
+# -----------------------------
+# Build style & HEAT bar
+# -----------------------------
+
+style_label = build_style_label(twr, flight_time_min, prop_size, auw)
+st.subheader("Build style")
+
+st.write(f"**Theoretical feel:** `{style_label}`")
+
+st.write("**Overall HEAT rating**")
+
+heat_color_hex = heat_color(overall_heat)
+heat_percent = int(overall_heat * 100)
+
+heat_bar_html = f"""
+<div style="
+    width: 100%;
+    height: 24px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #7FDBFF 0%, #FFD700 50%, #FF4136 100%);
+    position: relative;
+    overflow: hidden;
+">
+  <div style="
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: {heat_percent}%;
+      background-color: {heat_color_hex};
+      opacity: 0.8;
+  "></div>
+</div>
+<p style="margin-top: 4px; font-size: 0.9rem;">Heat: <b>{heat_percent}%</b></p>
+"""
+
+st.markdown(heat_bar_html, unsafe_allow_html=True)
+
+st.caption(
+    "All models here are intentionally approximate. Tune the coefficients to match your own logs, "
+    "thrust-stand data, and gut feel."
 )
-
-edit_component(
-    "motor",
-    Motor,
-    extra_fields=[
-        ("kv", int, 0),
-        ("statorDiameter", float, 0.0),
-        ("statorHeight", float, 0.0),
-        ("mountingPattern", str, ""),
-        ("maxCurrent", float, 0.0),
-        ("propMountType", str, "5mm"),
-    ],
-)
-
-edit_component(
-    "prop",
-    Propeller,
-    extra_fields=[
-        ("bladeCount", int, 2),
-        ("diameter", float, 0.0),
-        ("pitch", float, 0.0),
-        ("propMountType", str, "5mm"),
-    ],
-)
-
-# -------------------------
-# AIO OR FC + ESC
-# -------------------------
-use_aio = st.checkbox("Use AIO instead of FC + ESC", value=False)
-
-if use_aio:
-    edit_component(
-        "aio",
-        AIO,
-        extra_fields=[
-            ("maxCurrent", float, 0.0),
-            ("vin", float, 0.0),
-            ("mountingPattern", str, ""),
-        ],
-    )
-    st.session_state.components["fc"] = None
-    st.session_state.components["esc"] = None
-else:
-    edit_component("fc", FC)
-    edit_component(
-        "esc",
-        ESC,
-        extra_fields=[
-            ("maxCurrent", float, 0.0),
-            ("vin", float, 0.0),
-            ("mountingPattern", str, ""),
-        ],
-    )
-    st.session_state.components["aio"] = None
-
-# -------------------------
-# OPTIONAL COMPONENTS
-# -------------------------
-
-# RX
-use_rx = st.checkbox("Include RX?", value=False)
-if use_rx:
-    edit_component("rx", RX)
-    edit_component("rx_ant", ANT)
-else:
-    st.session_state.components["rx"] = None
-    st.session_state.components["rx_ant"] = None
-
-# VTX
-use_vtx = st.checkbox("Include VTX?", value=False)
-if use_vtx:
-    edit_component(
-        "vtx",
-        VTX,
-        extra_fields=[
-            ("mountingPattern", str, ""),
-            ("currentPull", float, 0.0),
-            ("vin", float, 0.0),
-        ],
-    )
-    edit_component("vtx_ant", ANT)
-else:
-    st.session_state.components["vtx"] = None
-    st.session_state.components["vtx_ant"] = None
-
-# CAP
-use_cap = st.checkbox("Include Capacitor?", value=False)
-if use_cap:
-    edit_component(
-        "cap",
-        CAP,
-        extra_fields=[
-            ("maxVoltage", float, 0.0),
-            ("microFarad", float, 0.0),
-        ],
-    )
-else:
-    st.session_state.components["cap"] = None
-
-# GPS
-use_gps = st.checkbox("Include GPS?", value=False)
-if use_gps:
-    edit_component("gps", GPS)
-else:
-    st.session_state.components["gps"] = None
-
-# Action Camera
-use_actioncam = st.checkbox("Include Action Camera?", value=False)
-if use_actioncam:
-    edit_component("actionCam", ActionCAM)
-else:
-    st.session_state.components["actionCam"] = None
-
-# FPV Camera (always optional but no toggle needed)
-edit_component("cam", CAM, extra_fields=[("mountingPattern", str, "")])
-
-# LIPO (always required)
-edit_component(
-    "lipo",
-    LIPO,
-    extra_fields=[
-        ("cells", int, 4),
-        ("capacity", int, 1000),
-        ("cRating", int, 100),
-        ("conType", str, "XT60"),
-        ("hv", bool, False),
-    ],
-)
-
-
-# -------------------------
-# BUILD & CHECK
-# -------------------------
-st.header("Build & Evaluate")
-
-model = st.text_input("Kwad Model")
-nickname = st.text_input("Nickname")
-buildType = st.text_input("Build Type (Freestyle, Racing, LR, etc.)")
-
-if st.button("Check"):
-    frame = st.session_state.components["frame"]
-    motor = st.session_state.components["motor"]
-    prop = st.session_state.components["prop"]
-
-    motors = [motor] * 4 if motor else []
-    props = [prop] * 4 if prop else []
-
-    kwad = Kwad(
-        model,
-        nickname,
-        buildType,
-        frame,
-        motors,
-        props,
-        st.session_state.components["esc"],
-        st.session_state.components["cap"],
-        st.session_state.components["fc"],
-        st.session_state.components["aio"],
-        st.session_state.components["gps"],
-        st.session_state.components["rx"],
-        st.session_state.components["rx_ant"],
-        st.session_state.components["vtx"],
-        st.session_state.components["vtx_ant"],
-        st.session_state.components["cam"],
-        st.session_state.components["actionCam"],
-        st.session_state.components["lipo"],
-    )
-
-    st.subheader("Results")
-    st.write("Dry Weight (g):", kwad.dryWeight)
-    st.write("All-Up Weight (g):", kwad.allUpWeight)
-    st.write("Total Cost ($):", kwad.totalCost)
-    st.write("Thrust (g):", kwad.thrust)
-    st.write("Thrust-to-Weight Ratio:", kwad.twr)
-    st.write("Max Payload Weight (g):", kwad.maxPayloadWeight)
-    st.write("Max RPM:", kwad.maxRPM)
-    st.write("Max Current (A):", kwad.maxCurrent)
-    st.write("Expected Flight Time (s):", kwad.expectedFlightTime)
-    st.write("Max Speed (MPH):", kwad.maxSpeed)
-    st.write("Expected Cooldown Time (s):", kwad.expectedCooldownTime)
-    st.write("Grade Rating:", kwad.gradeRating)
-    st.write("Compatibility:", kwad.compatibility)
