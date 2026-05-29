@@ -368,7 +368,7 @@ class Kwad:
 
         # Current‑based stress (dominant, non-linear)
         ratio = current / m.current_rating
-        current_stress = clamp01(ratio ** 2)
+        current_stress = clamp01((ratio - 0.3) / 0.5)
 
         # RPM & cooling as secondary modifiers
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
@@ -376,10 +376,11 @@ class Kwad:
         cooling = clamp01(m.prop.diameter / 7.0)
 
         return clamp01(
-            0.75 * current_stress +   # main driver: how hard we're pushing the motor
-            0.25 * rpm_norm -         # high RPM adds some extra stress
-            0.15 * cooling            # bigger props cool a bit better
+            0.75 * current_stress +
+            0.20 * rpm_norm -
+            0.15 * cooling
         )
+
 
 
 
