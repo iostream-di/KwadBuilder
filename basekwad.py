@@ -116,7 +116,9 @@ class LiPo:
 
     @property
     def safe_current(self):
-        return (self.capacity / 1000.0) * self.c_rating * self.health
+        realistic_c = self.c_rating * 0.30   # 30% of printed C rating
+        return (self.capacity / 1000.0) * realistic_c * self.health
+
 
     @property
     def internal_resistance(self):
