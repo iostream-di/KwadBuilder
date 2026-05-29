@@ -142,23 +142,16 @@ cfg = st.session_state.config
 def slider_with_input(label, minv, maxv, step, key):
     slider_key = f"{key}_slider"
     input_key = f"{key}_input"
+    base_key = f"{key}_value"
 
-    # Initialize session state for this field
-    if key not in st.session_state:
-        st.session_state[key] = cfg[key]
+    # Initialize the shared value
+    if base_key not in st.session_state:
+        st.session_state[base_key] = cfg[key]
 
-    # Sync slider/input values BEFORE widget creation
-    if slider_key in st.session_state:
-        st.session_state[key] = st.session_state[slider_key]
-    if input_key in st.session_state:
-        st.session_state[key] = st.session_state[input_key]
+    # Read current shared value
+    current = st.session_state[base_key]
 
-    # Clamp to bounds
-    val = st.session_state[key]
-    val = max(minv, min(maxv, val))
-    st.session_state[key] = val
-
-    # Render widgets
+    # Render widgets using the shared value
     col1, col2 = st.columns([3, 1])
 
     with col1:
@@ -166,7 +159,7 @@ def slider_with_input(label, minv, maxv, step, key):
             label,
             min_value=minv,
             max_value=maxv,
-            value=val,
+            value=current,
             step=step,
             key=slider_key
         )
@@ -176,20 +169,27 @@ def slider_with_input(label, minv, maxv, step, key):
             " ",
             min_value=minv,
             max_value=maxv,
-            value=val,
+            value=current,
             step=step,
             key=input_key
         )
 
-    # Determine which widget changed
-    if sval != val:
-        st.session_state[key] = sval
-    elif ival != val:
-        st.session_state[key] = ival
+    # Detect which widget changed
+    if sval != current:
+        new_val = sval
+    elif ival != current:
+        new_val = ival
+    else:
+        new_val = current
+
+    # Clamp
+    new_val = max(minv, min(maxv, new_val))
+
+    # Update shared value BEFORE next rerun
+    st.session_state[base_key] = new_val
 
     # Update cfg
-    cfg[key] = st.session_state[key]
-
+    cfg[key] = new_val
 
 # ---------------------------------------------------------
 # UI Sections
