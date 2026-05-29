@@ -325,12 +325,12 @@ class Kwad:
         I_max = self.max_current()
         motors = len(self.motors)
 
-        # Per‑motor current at full throttle
         per_motor_current = I_max / motors
-
-        # ESC rating stress (primary)
         esc_rating = self.esc.current_rating
-        esc_stress = clamp01(per_motor_current / esc_rating)
+
+        # ESC rating stress (primary, now harsh)
+        ratio = per_motor_current / esc_rating
+        esc_stress = clamp01(ratio ** 2)
 
         # Battery safe current stress (secondary)
         batt_safe = self.lipo.safe_current / motors
@@ -345,12 +345,12 @@ class Kwad:
 
         tuning_stress = clamp01(0.3 * pwm_norm + 0.4 * timing_norm + 0.3 * demag_norm)
 
-        # Weighted final stress score
         return clamp01(
-            0.55 * esc_stress +
-            0.25 * batt_stress +
-            0.20 * tuning_stress
+            0.7 * esc_stress +
+            0.2 * batt_stress +
+            0.1 * tuning_stress
         )
+
 
 
     def overstressed_motor(self):
