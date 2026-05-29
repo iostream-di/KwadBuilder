@@ -1,639 +1,325 @@
-import math
 import json
 import streamlit as st
+from basekwad import (
+    Propeller, Motor, LiPo, Frame, Flight_Controller,
+    Electronic_Speed_Controller, All_In_One, Video_System,
+    Radio_Link, Action_Cam, Kwad, clamp01
+)
 
 st.set_page_config(page_title="Theoretical FPV Build Explorer", layout="centered")
 
 st.title("Theoretical FPV Build Explorer")
-st.write("Play with sliders and theory to explore how an FPV build might behave.")
+st.write("A physics‑based quadcopter modeling tool powered by the BaseKwad engine.")
 
 
-# -----------------------------
-# Helpers – core math
-# -----------------------------
+# ---------------------------------------------------------
+# Default Presets
+# ---------------------------------------------------------
 
-def clamp01(x: float) -> float:
-    return max(0.0, min(1.0, x))
+DEFAULT_5IN = {
+    "prop_diameter": 5.1,
+    "prop_pitch": 4.3,
+    "prop_blades": 3,
+    "prop_weight": 3.5,
 
+    "motor_kv": 1950,
+    "motor_stator_h": 7,
+    "motor_stator_d": 23,
+    "motor_weight": 32,
 
-def nominal_voltage(s_cells: int) -> float:
-    return 3.8 * s_cells
+    "lipo_cells": 6,
+    "lipo_capacity": 1500,
+    "lipo_c": 80,
+    "lipo_weight": 190,
 
+    "frame_noise": 20,
+    "frame_wheelbase": 225,
+    "frame_prop_fit": 5.1,
+    "frame_weight": 120,
 
-def pack_internal_resistance_ohm(s_cells: int, capacity_mah: int) -> float:
-    capacity_ah = max(capacity_mah / 1000.0, 0.1)
-    base_per_cell = 0.018  # ~18 mΩ at 1 Ah
-    scale = (1.0 / capacity_ah) ** 1.2
-    return s_cells * base_per_cell * scale
+    "fc_loop": 1000,
+    "fc_cpu": 60,
+    "fc_dshot": 600,
+    "fc_weight": 8,
 
+    "esc_pwm": 48000,
+    "esc_demag": "med",
+    "esc_timing": "med",
+    "esc_weight": 14,
 
-def loaded_voltage(v_nom: float, current_a: float, r_pack: float) -> float:
-    sag = current_a * r_pack
-    return max(v_nom - sag, v_nom * 0.6)
+    "video_power": 800,
+    "video_weight": 10,
+    "video_digital": True,
 
+    "rx_weight": 4,
+    "rx_elrs": True,
 
-def rpm_no_load(kv: float, voltage: float) -> float:
-    return kv * voltage
+    "cam_weight": 0,
 
+    "motor_count": 4,
+    "payload": 0,
+}
 
-def rpm_loaded(no_load_rpm: float) -> float:
-    return no_load_rpm * 0.78
+DEFAULT_WHOOP = {
+    "prop_diameter": 1.6,
+    "prop_pitch": 0.8,
+    "prop_blades": 3,
+    "prop_weight": 0.3,
 
+    "motor_kv": 19000,
+    "motor_stator_h": 2,
+    "motor_stator_d": 8,
+    "motor_weight": 3,
 
-def prop_disk_area(diameter_in: float) -> float:
-    d_m = diameter_in * 0.0254
-    r_m = d_m / 2
-    return math.pi * r_m * r_m
+    "lipo_cells": 1,
+    "lipo_capacity": 300,
+    "lipo_c": 60,
+    "lipo_weight": 8,
 
+    "frame_noise": 40,
+    "frame_wheelbase": 65,
+    "frame_prop_fit": 1.6,
+    "frame_weight": 4,
 
-def pitch_speed_mps(pitch_in: float, rpm: float) -> float:
-    return pitch_in * 0.0254 * rpm / 60.0
+    "fc_loop": 4000,
+    "fc_cpu": 70,
+    "fc_dshot": 300,
+    "fc_weight": 4,
 
+    "esc_pwm": 96000,
+    "esc_demag": "low",
+    "esc_timing": "med-high",
+    "esc_weight": 3,
 
-def estimate_thrust_per_motor_g(diameter_in, pitch_in, blades, rpm, stator_d, stator_h):
-    area = prop_disk_area(diameter_in)
-    area_ref = prop_disk_area(5.0)
+    "video_power": 25,
+    "video_weight": 3,
+    "video_digital": False,
 
-    motor_factor = (stator_d * stator_h) / (23 * 6)
-    blade_factor = 1 + (blades - 3) * 0.12
+    "rx_weight": 1,
+    "rx_elrs": True,
 
-    area_term = (area / area_ref) ** 1.1
-    pitch_term = (pitch_in / 4.5) ** 0.6
-    rpm_term = (rpm / 40000.0) ** 1.05
+    "cam_weight": 0,
 
-    base_5in_thrust = 900.0
-    thrust = base_5in_thrust * area_term * pitch_term * blade_factor * motor_factor * rpm_term
-    return max(thrust, 5.0)
-
-
-def estimate_current_per_motor_a(thrust_g: float, diameter_in: float, efficiency_factor: float = 0.8) -> float:
-    size_factor = 5.0 / max(diameter_in, 1.5)
-    return ((thrust_g / 120.0) ** 1.35) * size_factor / efficiency_factor
-
-
-def estimate_flight_time_min(capacity_mah, avg_current_a):
-    if avg_current_a <= 0:
-        return 0.0
-    usable_mah = capacity_mah * 0.8
-    return (usable_mah / 1000.0) / avg_current_a * 60.0
-
-
-def heat_from_current(load_current, safe_current):
-    if safe_current <= 0:
-        return 1.0
-    ratio = load_current / safe_current
-    if ratio <= 0.5:
-        return 0.3 * (ratio / 0.5)
-    elif ratio <= 1.0:
-        return 0.3 + 0.4 * ((ratio - 0.5) / 0.5)
-    else:
-        return clamp01(0.7 + 0.3 * ((ratio - 1.0) / 0.5))
-
-
-def motor_kt_nm_per_a(kv_rpm_per_v: float) -> float:
-    if kv_rpm_per_v <= 0:
-        return 0.0
-    return 60.0 / (2 * math.pi * kv_rpm_per_v)
-
-
-def prop_inertia_relative(diameter_in: float, pitch_in: float, blades: int) -> float:
-    area = prop_disk_area(diameter_in)
-    return area * pitch_in * blades
-
-
-def esc_thermal_response(load_current_a: float, esc_rating_a: float) -> float:
-    if esc_rating_a <= 0:
-        return 1.0
-    ratio = (load_current_a ** 2) / (esc_rating_a ** 2)
-    return clamp01(0.4 * ratio)
+    "motor_count": 4,
+    "payload": 0,
+}
 
 
-def build_style_label(twr, flight_time, prop_size, auw, max_payload_g):
-    if twr < 2:
-        adjective = "Mild"
-    elif twr < 4:
-        adjective = "Average"
-    elif twr < 7:
-        adjective = "Aggressive"
-    else:
-        adjective = "Extreme"
+# ---------------------------------------------------------
+# Session State
+# ---------------------------------------------------------
 
-    if prop_size <= 3.0 and auw < 120 and twr > 4:
-        style = "Toothpick"
-    elif prop_size <= 2.5 and auw < 80:
-        style = "Whoop"
-    elif 7.0 <= prop_size <= 10.0 and 1000 <= auw <= 2000 and 1000 <= max_payload_g <= 2000 and 6 <= flight_time <= 10:
-        style = "Kamikaze"
-    elif 7.0 <= prop_size <= 17.0 and auw >= 1200 and max_payload_g >= 1500 and flight_time >= 12:
-        style = "Utility"
-    elif 3.0 <= prop_size <= 5.1 and 200 <= auw <= 800 and 4 <= twr <= 8:
-        style = "Freestyle"
-    elif abs(prop_size - 5.0) < 0.2 and 400 <= auw <= 600 and twr >= 8:
-        style = "Racing"
-    elif 3.0 <= prop_size <= 4.5 and 180 <= auw <= 350 and flight_time > 8 and twr < 4:
-        style = "Cinelog"
-    elif prop_size >= 6.0 and 2 <= twr <= 4 and flight_time > 10:
-        style = "Long Range"
-    else:
-        style = "General Purpose"
-
-    return f"{adjective} {style}"
+if "config" not in st.session_state:
+    st.session_state.config = DEFAULT_5IN.copy()
 
 
-def render_heat_bar(label: str, value_0_1: float):
-    value_0_1 = clamp01(value_0_1)
-    percent = int(value_0_1 * 100)
-    indicator_pos = percent
-    bar_html = f"""
+def load_preset(preset):
+    st.session_state.config = preset.copy()
+    st.experimental_rerun()
+
+
+# ---------------------------------------------------------
+# UI – Preset Buttons
+# ---------------------------------------------------------
+
+colA, colB = st.columns(2)
+with colA:
+    if st.button("Load 5\" Freestyle Defaults"):
+        load_preset(DEFAULT_5IN)
+
+with colB:
+    if st.button("Load 65mm Tiny Whoop Defaults"):
+        load_preset(DEFAULT_WHOOP)
+
+
+cfg = st.session_state.config
+
+
+# ---------------------------------------------------------
+# UI – Component Inputs
+# ---------------------------------------------------------
+
+st.subheader("Propeller")
+
+cfg["prop_diameter"] = st.slider("Diameter (in)", 1.0, 17.0, cfg["prop_diameter"], 0.1)
+cfg["prop_pitch"] = st.slider("Pitch (in)", 0.5, 8.0, cfg["prop_pitch"], 0.1)
+cfg["prop_blades"] = st.slider("Blades", 2, 8, cfg["prop_blades"])
+cfg["prop_weight"] = st.slider("Prop weight (g)", 0.1, 10.0, cfg["prop_weight"], 0.1)
+
+st.subheader("Motors")
+
+cfg["motor_kv"] = st.slider("Motor KV", 500, 30000, cfg["motor_kv"], 50)
+cfg["motor_stator_h"] = st.slider("Stator height (mm)", 2, 15, cfg["motor_stator_h"])
+cfg["motor_stator_d"] = st.slider("Stator diameter (mm)", 5, 35, cfg["motor_stator_d"])
+cfg["motor_weight"] = st.slider("Motor weight (g)", 2, 60, cfg["motor_weight"])
+cfg["motor_count"] = st.selectbox("Motor count", [4, 6, 8, 12], index=[4,6,8,12].index(cfg["motor_count"]))
+
+st.subheader("Battery")
+
+cfg["lipo_cells"] = st.slider("Cells (S)", 1, 8, cfg["lipo_cells"])
+cfg["lipo_capacity"] = st.slider("Capacity (mAh)", 200, 20000, cfg["lipo_capacity"], 10)
+cfg["lipo_c"] = st.slider("C rating", 20, 150, cfg["lipo_c"])
+cfg["lipo_weight"] = st.slider("Battery weight (g)", 5, 600, cfg["lipo_weight"])
+
+st.subheader("Frame")
+
+cfg["frame_noise"] = st.slider("Frame noise (0–100)", 0, 100, cfg["frame_noise"])
+cfg["frame_wheelbase"] = st.slider("Wheelbase (mm)", 50, 500, cfg["frame_wheelbase"])
+cfg["frame_prop_fit"] = st.slider("Max prop size (in)", 1.0, 17.0, cfg["frame_prop_fit"], 0.1)
+cfg["frame_weight"] = st.slider("Frame weight (g)", 3, 300, cfg["frame_weight"])
+
+st.subheader("Flight Controller")
+
+cfg["fc_loop"] = st.selectbox("PID loop frequency", [100,200,250,333,400,500,666,800,1000,2000,4000,8000],
+                              index=[100,200,250,333,400,500,666,800,1000,2000,4000,8000].index(cfg["fc_loop"]))
+cfg["fc_cpu"] = st.slider("CPU load (%)", 10, 100, cfg["fc_cpu"])
+cfg["fc_dshot"] = st.selectbox("DShot", [300, 600, 1200], index=[300,600,1200].index(cfg["fc_dshot"]))
+cfg["fc_weight"] = st.slider("FC weight (g)", 2, 20, cfg["fc_weight"])
+
+st.subheader("ESC")
+
+cfg["esc_pwm"] = st.selectbox("PWM frequency", [24000,32000,48000,96000,128000,192000],
+                              index=[24000,32000,48000,96000,128000,192000].index(cfg["esc_pwm"]))
+cfg["esc_demag"] = st.selectbox("Demag compensation", ["disabled","low","high"],
+                                index=["disabled","low","high"].index(cfg["esc_demag"]))
+cfg["esc_timing"] = st.selectbox("Timing", ["low","med-low","med","med-high","high"],
+                                 index=["low","med-low","med","med-high","high"].index(cfg["esc_timing"]))
+cfg["esc_weight"] = st.slider("ESC weight (g)", 2, 40, cfg["esc_weight"])
+
+st.subheader("Video System")
+
+cfg["video_power"] = st.slider("VTX power (mW)", 25, 2000, cfg["video_power"])
+cfg["video_weight"] = st.slider("Video weight (g)", 2, 50, cfg["video_weight"])
+cfg["video_digital"] = st.checkbox("Digital video", cfg["video_digital"])
+
+st.subheader("Radio Link")
+
+cfg["rx_weight"] = st.slider("Receiver weight (g)", 1, 20, cfg["rx_weight"])
+cfg["rx_elrs"] = st.checkbox("ELRS", cfg["rx_elrs"])
+
+st.subheader("Action Camera")
+
+cfg["cam_weight"] = st.slider("Action cam weight (g)", 0, 200, cfg["cam_weight"])
+
+st.subheader("Payload")
+
+cfg["payload"] = st.slider("Payload weight (g)", 0, 2000, cfg["payload"], 5)
+
+
+# ---------------------------------------------------------
+# Build Kwad Object
+# ---------------------------------------------------------
+
+prop = Propeller(cfg["prop_diameter"], cfg["prop_pitch"], cfg["prop_blades"], cfg["prop_weight"])
+motors = [Motor(cfg["motor_stator_h"], cfg["motor_stator_d"], cfg["motor_kv"], cfg["motor_weight"], prop)
+          for _ in range(cfg["motor_count"])]
+
+lipo = LiPo(cfg["lipo_cells"], cfg["lipo_capacity"], cfg["lipo_c"], cfg["lipo_weight"])
+frame = Frame(cfg["frame_noise"], cfg["frame_wheelbase"], cfg["frame_prop_fit"], cfg["frame_weight"])
+fc = Flight_Controller(cfg["fc_loop"], cfg["fc_cpu"], cfg["fc_dshot"], cfg["fc_weight"])
+esc = Electronic_Speed_Controller(cfg["esc_pwm"], cfg["esc_demag"], cfg["esc_timing"], cfg["esc_weight"])
+video = Video_System(cfg["video_power"], cfg["video_weight"], cfg["video_digital"])
+rx = Radio_Link(cfg["rx_weight"], cfg["rx_elrs"])
+cam = Action_Cam(cfg["cam_weight"])
+
+quad = Kwad()
+quad.motors = motors
+quad.lipo = lipo
+quad.frame = frame
+quad.fc = fc
+quad.esc = esc
+quad.video = video
+quad.rx = rx
+quad.action_cam = cam
+quad.payload = cfg["payload"]
+
+
+# ---------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------
+
+st.subheader("Performance Metrics")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric("AUW", f"{quad.auw():.0f} g")
+    st.metric("Max Thrust", f"{quad.max_thrust():.0f} g")
+    st.metric("TWR", f"{quad.max_twr():.2f} : 1")
+    st.metric("Max Current", f"{quad.max_current():.1f} A")
+
+with col2:
+    st.metric("Cruise Current", f"{quad.cruise_current():.1f} A")
+    st.metric("Battery Safe Current", f"{quad.batt_safe_current():.1f} A")
+    st.metric("Flight Time", f"{quad.flight_time():.1f} min")
+    st.metric("Voltage Sag", f"{quad.voltage_sag()*100:.1f} %")
+
+
+# ---------------------------------------------------------
+# Heat / Stress Bars
+# ---------------------------------------------------------
+
+def heat_bar(label, value):
+    pct = int(clamp01(value) * 100)
+    pos = pct
+    html = f"""
     <div style="margin-bottom:8px;">
       <div style="font-weight:600; margin-bottom:2px;">{label}</div>
       <div style="width: 100%; height: 22px; border-radius: 11px;
            background: linear-gradient(90deg, #7FDBFF 0%, #FFD700 50%, #FF4136 100%);
            position: relative;">
-        <div style="position: absolute; top: -4px; left: calc({indicator_pos}% - 5px);
+        <div style="position: absolute; top: -4px; left: calc({pos}% - 5px);
                     width: 10px; height: 30px; background: black; border-radius: 3px;">
         </div>
       </div>
-      <div style="margin-top:2px; font-size:0.85rem;">{percent}%</div>
+      <div style="margin-top:2px; font-size:0.85rem;">{pct}%</div>
     </div>
     """
-    st.markdown(bar_html, unsafe_allow_html=True)
+    st.markdown(html, unsafe_allow_html=True)
 
 
-# -----------------------------
-# Session state & defaults
-# -----------------------------
+st.subheader("Thermal & Reliability Stress")
 
-PROP_SIZE_OPTIONS = [
-    1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5,
-    5.0, 5.1, 5.5, 6.0, 6.5, 7.0, 8.0, 9.0,
-    10.0, 12.0, 13.0, 15.0, 17.0
-]
-
-DEFAULT_BUILD = {
-    "prop_size": 5.0,
-    "prop_pitch": 4.5,
-    "prop_blades": 3,
-    "motor_kv": 1950,
-    "stator_d": 23,
-    "stator_h": 6,
-    "lipo_s": 6,
-    "lipo_capacity": 1500,
-    "lipo_c": 80,
-    "auw": 700,
-    "payload_g": 0,
-    "motor_count": 4,
-    "fc_loop_hz": 1000,
-    "frame_noise": 20,
-    "esc_pwm": 48000,
-    "esc_demag": "Medium",
-    "esc_timing": "Medium",
-}
-
-if "build" not in st.session_state:
-    st.session_state.build = DEFAULT_BUILD.copy()
+heat_bar("FC Stress", quad.overstressed_fc())
+heat_bar("ESC Stress", quad.overstressed_esc())
+heat_bar("Motor Stress", quad.overstressed_motor())
+heat_bar("Desync Risk", quad.overstressed_desync())
+heat_bar("Voltage Sag Severity", quad.overstressed_voltage_sag())
+heat_bar("Overall Stress", quad.overstressed_overall())
 
 
-# -----------------------------
-# UI – sliders
-# -----------------------------
+# ---------------------------------------------------------
+# Build Style
+# ---------------------------------------------------------
 
-st.subheader("Build parameters")
-
-b = st.session_state.build
-
-if b["prop_size"] not in PROP_SIZE_OPTIONS:
-    b["prop_size"] = min(PROP_SIZE_OPTIONS, key=lambda x: abs(x - b["prop_size"]))
-
-prop_size = st.selectbox(
-    "Prop size (inches)",
-    PROP_SIZE_OPTIONS,
-    index=PROP_SIZE_OPTIONS.index(b["prop_size"]),
-    key="prop_size",
-)
-prop_pitch = st.slider("Prop pitch (inches)", 0.8, 8.0, b["prop_pitch"], 0.1, key="prop_pitch")
-prop_blades = st.slider("Prop blades", 2, 8, b["prop_blades"], 1, key="prop_blades")
-motor_kv = st.slider("Motor KV", 300, 30000, b["motor_kv"], 50, key="motor_kv")
-stator_d = st.slider("Motor stator diameter (mm)", 7, 52, b["stator_d"], 1, key="stator_d")
-stator_h = st.slider("Motor stator height (mm)", 2, 15, b["stator_h"], 1, key="stator_h")
-lipo_s = st.slider("LiPo cells (S)", 1, 8, b["lipo_s"], 1, key="lipo_s")
-lipo_capacity = st.slider("LiPo capacity (mAh)", 260, 20000, b["lipo_capacity"], 10, key="lipo_capacity")
-lipo_c = st.slider("LiPo C rating", 20, 150, b["lipo_c"], 1, key="lipo_c")
-auw = st.slider("All-up weight (g, without payload)", 15, 4000, b["auw"], 5, key="auw")
-payload_g = st.slider("Payload weight (g)", 0, 2000, b.get("payload_g", 0), 5, key="payload_g")
-effective_auw = auw + payload_g
-motor_count = st.selectbox(
-    "Motor count",
-    [4, 6, 8, 12],
-    index=[4, 6, 8, 12].index(b["motor_count"]),
-    key="motor_count",
-)
-
-st.subheader("Control & ESC parameters")
-
-fc_loop_options = [100, 200, 250, 333, 400, 500, 666, 800, 1000, 2000, 4000, 8000]
-fc_loop_hz = st.selectbox(
-    "FC PID loop frequency (Hz)",
-    fc_loop_options,
-    index=fc_loop_options.index(b.get("fc_loop_hz", 1000)),
-    key="fc_loop_hz",
-)
-
-frame_noise = st.slider(
-    "Theoretical frame & motor noise level",
-    0, 100, b.get("frame_noise", 20), 1, key="frame_noise"
-)
-
-esc_pwm_options = [24000, 32000, 48000, 96000, 128000, 192000]
-esc_pwm = st.selectbox(
-    "ESC PWM frequency (Hz)",
-    esc_pwm_options,
-    index=esc_pwm_options.index(b.get("esc_pwm", 48000)),
-    key="esc_pwm",
-)
-
-esc_demag_options = ["Off", "Low", "Medium", "High"]
-esc_demag = st.selectbox(
-    "ESC demag compensation",
-    esc_demag_options,
-    index=esc_demag_options.index(b.get("esc_demag", "Medium")),
-    key="esc_demag",
-)
-
-esc_timing_options = ["Low", "Medium", "High", "Very High"]
-esc_timing = st.selectbox(
-    "ESC timing",
-    esc_timing_options,
-    index=esc_timing_options.index(b.get("esc_timing", "Medium")),
-    key="esc_timing",
-)
-
-st.session_state.build.update(
-    dict(
-        prop_size=prop_size,
-        prop_pitch=prop_pitch,
-        prop_blades=prop_blades,
-        motor_kv=motor_kv,
-        stator_d=stator_d,
-        stator_h=stator_h,
-        lipo_s=lipo_s,
-        lipo_capacity=lipo_capacity,
-        lipo_c=lipo_c,
-        auw=auw,
-        payload_g=payload_g,
-        motor_count=motor_count,
-        fc_loop_hz=fc_loop_hz,
-        frame_noise=frame_noise,
-        esc_pwm=esc_pwm,
-        esc_demag=esc_demag,
-        esc_timing=esc_timing,
-    )
-)
+st.subheader("Build Style Classification")
+st.write(f"**{quad.build_style()}**")
 
 
-# -----------------------------
-# Computations
-# -----------------------------
+# ---------------------------------------------------------
+# Import / Export
+# ---------------------------------------------------------
 
-V_nom = nominal_voltage(lipo_s)
+st.subheader("Build Profile I/O")
 
-rpm_nl_nom = rpm_no_load(motor_kv, V_nom)
-rpm_ld_nom = rpm_loaded(rpm_nl_nom)
-thrust_per_motor_nom = estimate_thrust_per_motor_g(
-    prop_size, prop_pitch, prop_blades, rpm_ld_nom, stator_d, stator_h
-)
-current_per_motor_nom = estimate_current_per_motor_a(thrust_per_motor_nom, prop_size)
-total_current_nom = current_per_motor_nom * motor_count
+export_json = json.dumps(cfg, indent=2)
+st.download_button("Download Build JSON", export_json, "kwad_build.json", "application/json")
 
-r_pack = pack_internal_resistance_ohm(lipo_s, lipo_capacity)
-V_loaded = loaded_voltage(V_nom, total_current_nom, r_pack)
-
-rpm_nl = rpm_no_load(motor_kv, V_loaded)
-rpm_ld = rpm_loaded(rpm_nl)
-thrust_per_motor_g = estimate_thrust_per_motor_g(
-    prop_size, prop_pitch, prop_blades, rpm_ld, stator_d, stator_h
-)
-total_thrust_g = thrust_per_motor_g * motor_count
-twr = total_thrust_g / effective_auw if effective_auw > 0 else 0.0
-
-max_payload_g = max(total_thrust_g / 2.0 - effective_auw, 0.0)
-
-max_speed_mps = pitch_speed_mps(prop_pitch, rpm_ld)
-max_speed_mph = max_speed_mps * 2.23694
-
-current_per_motor_a = estimate_current_per_motor_a(thrust_per_motor_g, prop_size)
-total_current_a = current_per_motor_a * motor_count
-
-cruise_factor = 0.35 + 0.25 * clamp01(twr / 6.0)
-cruise_current_a = total_current_a * cruise_factor
-flight_time_min = estimate_flight_time_min(lipo_capacity, cruise_current_a)
-
-battery_safe_a = (lipo_capacity / 1000.0) * lipo_c
-
-kt = motor_kt_nm_per_a(motor_kv)
-prop_inertia_rel = prop_inertia_relative(prop_size, prop_pitch, prop_blades)
-
-sag_ratio = clamp01((V_nom - V_loaded) / max(V_nom, 1e-6))
-sag_severity = clamp01(sag_ratio / 0.3)
-
-# FC overheat
-loop_norm = math.log10(fc_loop_hz) / math.log10(8000)
-noise_norm = frame_noise / 100.0
-kv_norm = motor_kv / 30000.0
-fc_heat = clamp01(
-    0.25 * loop_norm +
-    0.3 * noise_norm +
-    0.2 * sag_severity +
-    0.25 * kv_norm
-)
-
-# ESC overheat
-esc_safe_a = battery_safe_a / motor_count if motor_count > 0 else 0.0
-esc_heat_current = heat_from_current(current_per_motor_a, esc_safe_a)
-
-pwm_norm = (esc_pwm - 24000) / (192000 - 24000)
-timing_map = {"Low": 0.2, "Medium": 0.4, "High": 0.7, "Very High": 1.0}
-demag_map = {"Off": 1.0, "Low": 0.7, "Medium": 0.4, "High": 0.2}
-timing_norm = timing_map.get(esc_timing, 0.4)
-demag_norm = demag_map.get(esc_demag, 0.4)
-
-esc_heat_extra = clamp01(
-    0.3 * pwm_norm +
-    0.4 * timing_norm +
-    0.3 * demag_norm
-)
-
-esc_heat = clamp01(0.6 * esc_heat_current + 0.4 * esc_heat_extra)
-
-# Motor overheat
-motor_safe_current = 20.0 * (stator_d * stator_h) / (23 * 6)
-motor_current_heat = heat_from_current(current_per_motor_a, motor_safe_current)
-
-rpm_norm = clamp01(rpm_ld / 50000.0)
-cooling_factor = clamp01(prop_size / 7.0)
-inertia_norm = clamp01(prop_inertia_rel / prop_inertia_relative(5.0, 4.5, 3))
-
-motor_heat = clamp01(
-    0.5 * motor_current_heat +
-    0.25 * inertia_norm +
-    0.25 * rpm_norm -
-    0.15 * cooling_factor
-)
-
-# Desync risk
-desync_base = clamp01(
-    0.3 * kv_norm +
-    0.3 * inertia_norm +
-    0.2 * timing_norm +
-    0.2 * rpm_norm
-)
-desync_potential = clamp01(desync_base * (1.0 + 0.4 * (1.0 - demag_norm)))
-
-overall_heat = clamp01((fc_heat + esc_heat + motor_heat + desync_potential) / 4.0)
-
-
-# -----------------------------
-# Output – main metrics
-# -----------------------------
-
-st.subheader("Theoretical metrics")
-
-colA, colB = st.columns(2)
-
-with colA:
-    st.metric("Max speed", f"{max_speed_mph:0.1f} mph")
-    st.metric("Total max thrust", f"{total_thrust_g:0.0f} g")
-    st.metric("Thrust-to-weight ratio", f"{twr:0.2f} : 1")
-    st.metric("Max payload (TWR≈2)", f"{max_payload_g:0.0f} g")
-
-with colB:
-    st.metric("Total max current", f"{total_current_a:0.1f} A")
-    st.metric("Cruise current (est.)", f"{cruise_current_a:0.1f} A")
-    st.metric("Battery safe current", f"{battery_safe_a:0.1f} A")
-    st.metric("Expected flight time", f"{flight_time_min:0.1f} min")
-
-st.metric("Effective AUW (with payload)", f"{effective_auw:0.0f} g")
-
-st.subheader("Thermal & reliability potentials")
-
-render_heat_bar("FC overheat", fc_heat)
-render_heat_bar("ESC overheat", esc_heat)
-render_heat_bar("Motor overheat", motor_heat)
-render_heat_bar("Desync risk", desync_potential)
-render_heat_bar("Voltage sag severity", sag_severity)
-render_heat_bar("Overall HEAT rating", overall_heat)
-
-
-# -----------------------------
-# Build style
-# -----------------------------
-
-style_label = build_style_label(twr, flight_time_min, prop_size, effective_auw, max_payload_g)
-st.subheader("Build style")
-st.write(f"**Theoretical feel:** `{style_label}`")
-
-
-# -----------------------------
-# Export / Import build profile
-# -----------------------------
-
-st.subheader("Build profile I/O")
-
-export_data = {
-    "build": st.session_state.build,
-    "metrics": {
-        "max_speed_mph": max_speed_mph,
-        "total_thrust_g": total_thrust_g,
-        "twr": twr,
-        "max_payload_g": max_payload_g,
-        "flight_time_min": flight_time_min,
-        "overall_heat": overall_heat,
-        "fc_heat": fc_heat,
-        "esc_heat": esc_heat,
-        "motor_heat": motor_heat,
-        "desync_potential": desync_potential,
-        "sag_severity": sag_severity,
-        "effective_auw_g": effective_auw,
-        "style_label": style_label,
-    },
-}
-
-export_json = json.dumps(export_data, indent=2)
-st.download_button(
-    label="Download current build as JSON",
-    data=export_json,
-    file_name="fpv_build_profile.json",
-    mime="application/json",
-)
-
-uploaded = st.file_uploader("Import build profile (JSON)", type=["json"])
-if uploaded is not None:
+uploaded = st.file_uploader("Import Build JSON", type=["json"])
+if uploaded:
     try:
-        imported = json.load(uploaded)
-        if "build" in imported and isinstance(imported["build"], dict):
-            for k, v in imported["build"].items():
-                if k in st.session_state.build:
-                    st.session_state.build[k] = v
-            st.success("Build profile imported. Rerunning with new parameters.")
-            st.experimental_rerun()
-        else:
-            st.error("Invalid JSON format: missing 'build' object.")
+        data = json.load(uploaded)
+        st.session_state.config = data
+        st.success("Build imported successfully.")
+        st.experimental_rerun()
     except Exception as e:
-        st.error(f"Failed to parse JSON: {e}")
+        st.error(f"Failed to import JSON: {e}")
 
 
-# -----------------------------
-# FPV THEORY & FORMULAS SECTION (expandable)
-# -----------------------------
+# ---------------------------------------------------------
+# Theory Section
+# ---------------------------------------------------------
 
-with st.expander("FPV Theory, Math & Community Reference", expanded=False):
-
-    st.subheader("Core math formulas used")
-
-    st.markdown("**1. Motor RPM**")
-    st.latex(r"RPM_{NL} = KV \cdot V")
-    st.latex(r"RPM_{L} \approx RPM_{NL} \cdot 0.78")
-
-    st.markdown("---")
-    st.markdown("**2. Pitch speed (ideal, no drag)**")
-    st.latex(r"V_{pitch} = Pitch_{in} \cdot 0.0254 \cdot \frac{RPM}{60}")
-
-    st.markdown("---")
-    st.markdown("**3. Prop disk area**")
-    st.latex(r"A = \pi r^2 = \pi \left(\frac{D_{in} \cdot 0.0254}{2}\right)^2")
-
-    st.markdown("---")
-    st.markdown("**4. Thrust estimation (heuristic)**")
-    st.latex(r"T \propto A^{1.1} \cdot Pitch^{0.6} \cdot RPM^{1.05} \cdot Blades \cdot MotorFactor")
-
-    st.markdown("---")
-    st.markdown("**5. Current draw (heuristic)**")
-    st.latex(r"I \propto \left(\frac{Thrust}{120\,g}\right)^{1.35} \cdot \frac{5}{D_{in}}")
-
-    st.markdown("---")
-    st.markdown("**6. Battery safe current**")
-    st.latex(r"I_{\text{safe}} = C \cdot Ah")
-
-    st.markdown("---")
-    st.markdown("**7. Flight time estimate**")
-    st.latex(r"t = \frac{0.8 \cdot Capacity_{Ah}}{I_{\text{cruise}}} \cdot 60")
-
-    st.markdown("---")
-    st.markdown("**8. Thrust-to-weight ratio**")
-    st.latex(r"TWR = \frac{T_{\text{total}}}{W}")
-
-    st.markdown("---")
-    st.markdown("**9. Motor torque constant**")
-    st.latex(r"K_t \,[Nm/A] \approx \frac{60}{2\pi \cdot KV}")
-
-    st.markdown("---")
-    st.markdown("**10. Prop inertia (relative)**")
-    st.latex(r"I_{\text{prop}} \propto A \cdot Pitch \cdot Blades")
-
-    st.subheader("Community reference values")
-
-    st.markdown("**Typical loaded RPM ranges**")
-    st.table({
-        "Build Type": [
-            "Whoop (1–2\")",
-            "Toothpick (2.5–3\")",
-            "3\" Freestyle",
-            "5\" Freestyle",
-            "5\" Racing",
-            "7\" Long Range",
-            "Kamikaze",
-            "Utility",
-        ],
-        "Prop Size": [
-            "1.6–2.0\"",
-            "2.5–3.0\"",
-            "3.0\"",
-            "5.0\"",
-            "5.0\"",
-            "7.0\"",
-            "7–10\"",
-            "7–17\"",
-        ],
-        "Loaded RPM Range": [
-            "28,000–45,000",
-            "32,000–48,000",
-            "38,000–48,000",
-            "28,000–36,000",
-            "34,000–42,000",
-            "18,000–26,000",
-            "18,000–26,000",
-            "12,000–22,000",
-        ],
-    })
-
-    st.markdown("---")
-    st.markdown("**Typical AUW by build type**")
-    st.table({
-        "Build Type": [
-            "Whoop",
-            "Toothpick",
-            "3\" Freestyle",
-            "5\" Freestyle",
-            "5\" Racing",
-            "7\" Long Range",
-            "Cinewhoop (3–3.5\")",
-            "Kamikaze",
-            "Utility",
-        ],
-        "AUW Range": [
-            "20–45 g",
-            "55–120 g",
-            "120–200 g",
-            "650–800 g",
-            "430–550 g",
-            "650–1100 g",
-            "180–320 g",
-            "1000–2000 g",
-            "1500–4000 g (or more)",
-        ],
-    })
-
-    st.markdown("---")
-    st.markdown("**Typical TWR ranges**")
-    st.table({
-        "Build Type": [
-            "Whoop",
-            "Toothpick",
-            "3\" Freestyle",
-            "5\" Freestyle",
-            "5\" Racing",
-            "Cinematic",
-            "Kamikaze",
-            "Utility",
-            "Long Range",
-        ],
-        "TWR Range": [
-            "2–3",
-            "4–7",
-            "4–6",
-            "5–8",
-            "8–12",
-            "2–4",
-            "2.5–4",
-            "1.5–3",
-            "2–3",
-        ],
-        "Notes": [
-            "Flips, limited punch",
-            "Very high for weight",
-            "Snappy, responsive",
-            "Classic “feel good” zone",
-            "Brutal acceleration",
-            "Smooth, stable",
-            "Maneuverable with 1–2 kg payload",
-            "Heavy lift, sluggish, payload-focused",
-            "Efficiency-focused cruising",
-        ],
-    })
-
-st.write("---")
-st.caption(
-    "This FPV Build Explorer is a theoretical modeling tool. "
-    "All values are approximations tuned to community experience, not laboratory measurements. "
-    "Use it to understand trends and relationships, then validate with real-world testing."
-)
+with st.expander("FPV Theory, Math & Community Reference"):
+    st.write("This section mirrors the formulas and reference tables from the BaseKwad engine.")
+    st.write("Use it to understand how the model works internally.")
