@@ -11,6 +11,7 @@ All real-world deviation is handled through user-tunable fuzz factors.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from math import pi, sqrt, exp
 
 
@@ -78,7 +79,7 @@ LIPO_DEFAULT = BatteryChemistry(
     nominal_cell_voltage=3.7,
     full_cell_voltage=4.2,
     empty_cell_voltage=3.3,
-    internal_resistance_per_cell_ohm=0.003,
+    internal_resistance_per_cell_ohm=0.0045,
 )
 
 
@@ -129,45 +130,146 @@ def disk_area_from_diameter(diameter_m: float) -> float:
     return pi * r * r
 
 
-def static_thrust_simple(rpm: float, diameter_m: float, pitch_m: float,
-                         fuzz: Fuzz,
-                         rho: float = AIR_DENSITY_SEA_LEVEL,
-                         k_t: float = 0.1) -> float:
+def static_thrust_simple(
+    rpm: float,
+    diameter_in: float,
+    pitch_in: float,
+    blades: int,
+    fuzz: Fuzz,
+    rho: float = AIR_DENSITY_SEA_LEVEL,
+) -> float:
     """
-    Simple static thrust model based on momentum theory:
-
-        T ≈ C_T * ρ * n² * D⁴
-
-    where C_T ~ 0.1 for typical multirotor props.
+    Static thrust model that accounts for:
+    - Diameter
+    - Pitch
+    - Blade count
+    - Air density
+    Returns thrust in Newtons.
     """
-    rev_s = rpm / 60.0
-    rho_adj = rho * fuzz.air_density_multiplier
-    t = k_t * fuzz.thrust_coefficient_multiplier * rho_adj * (rev_s ** 2) * (diameter_m ** 4)
-    return t * fuzz.prop_thrust_multiplier
+
+    diameter_m = diameter_in * 0.0254
+    pitch_m = pitch_in * 0.0254
+    n = rpm / 60.0  # rev/s
+
+    # Pitch-to-diameter ratio
+    p_over_d = pitch_m / diameter_m
+
+    # Base thrust coefficient for a 2-blade reference prop
+    base_ct = 0.08  # tuned constant, refine against real data
+
+    # Pitch influence: higher pitch → higher CT
+    ct_pitch = base_ct * (p_over_d ** 0.7)
+
+    # Blade count influence: more blades → more thrust, more drag
+    # 2 blades = 1.0, 3 blades ≈ 1.15, 4 blades ≈ 1.25, etc.
+    blade_factor = 1.0 + 0.15 * (blades - 2)
+
+    ct = ct_pitch * blade_factor
+
+    # (Fuzz multiplier can be re-enabled later)
+    # ct *= fuzz.thrust_coefficient_multiplier
+
+    thrust_n = ct * rho * (n ** 2) * (diameter_m ** 4)
+    return thrust_n
 
 
 def induced_power(thrust_n: float, disk_area_m2: float,
                   fuzz: Fuzz,
                   rho: float = AIR_DENSITY_SEA_LEVEL) -> float:
     rho_adj = rho * fuzz.air_density_multiplier
-    if disk_area_m2 <= 0:
-        return 0
+    if disk_area_m2 <= 0 or thrust_n <= 0:
+        return 0.0
+    # Equivalent to T * v_i with v_i = sqrt(T / (2 ρ A))
     return (thrust_n ** 1.5) / sqrt(2 * rho_adj * disk_area_m2)
 
+def rpm_under_load(
+    throttle: float,
+    kv_rpm_per_v: float,
+    voltage_v: float,
+    current_a: float,
+    motor_resistance_ohm: float,
+    alpha: float = 1.35,
+) -> float:
+    """
+    Compute RPM under load considering:
+    - nonlinear throttle curve
+    - back-EMF
+    - winding resistance voltage drop
+    """
+    # Ideal no-load RPM from throttle curve
+    rpm_ideal = (throttle ** alpha) * kv_rpm_per_v * voltage_v
 
-def prop_power_from_thrust(thrust_n: float, diameter_m: float,
-                           fuzz: Fuzz,
-                           rho: float = AIR_DENSITY_SEA_LEVEL,
-                           figure_of_merit=0.3):
-    area = disk_area_from_diameter(diameter_m)
+    # Back-EMF voltage at that RPM
+    v_back = rpm_ideal / kv_rpm_per_v
+
+    # Voltage lost to winding resistance
+    v_drop = current_a * motor_resistance_ohm
+
+    # Effective voltage available to spin the motor
+    v_eff = max(voltage_v - v_drop, 0.0)
+
+    # If back-EMF exceeds available voltage, motor saturates
+    if v_back > v_eff:
+        return v_eff * kv_rpm_per_v
+
+    return rpm_ideal
+
+
+
+def prop_disk_area_from_diameter_in(diameter_in: float) -> float:
+    diameter_m = diameter_in * 0.0254
+    return math.pi * (diameter_m / 2.0) ** 2
+
+
+def throttle_to_rpm(throttle: float, kv_rpm_per_v: float, voltage_v: float, alpha: float = 1.35) -> float:
+    """
+    Nonlinear throttle → RPM mapping.
+    alpha > 1 makes low throttle weaker and pushes hover throttle upward.
+    """
+    throttle = max(0.0, min(1.0, throttle))
+    return (throttle ** alpha) * kv_rpm_per_v * voltage_v
+
+
+def prop_power_from_thrust(
+    thrust_n: float,
+    diameter_in: float,
+    blades: int,
+    fuzz: Fuzz,
+    rho: float = AIR_DENSITY_SEA_LEVEL,
+    figure_of_merit: float = 0.22,
+) -> float:
+    """
+    Induced + profile power estimate for a prop:
+    - Uses induced power from momentum theory
+    - Divides by figure of merit
+    - Adds extra loss for higher blade count
+    Returns power in Watts.
+    """
+
+    diameter_m = diameter_in * 0.0254
+    area = math.pi * (diameter_m / 2.0) ** 2
+
+    # Ideal induced power
     p_i = induced_power(thrust_n, area, fuzz, rho)
 
-    fm = max(figure_of_merit * fuzz.figure_of_merit_multiplier, 0.05)
+    # Effective figure of merit (clamped)
+    fm = max(figure_of_merit, 0.1)
 
     power = p_i / fm
 
-    # Apply hover inefficiency
-    return power * fuzz.hover_power_multiplier
+    # More blades → more profile drag → more power required
+    # 2 blades = 1.0, 3 blades ≈ 1.1, 4 blades ≈ 1.2, etc.
+    blade_loss_factor = 1.0 + 0.10 * (blades - 2)
+    power *= blade_loss_factor
+
+    # Additional non-ideal losses (tip vortices, inflow distortion, etc.)
+    power *= 1.15  # 15% extra losses
+
+    # (Fuzz multipliers can be re-enabled later)
+    # power *= fuzz.hover_power_multiplier
+    # power /= max(fuzz.figure_of_merit_multiplier, 0.3)
+
+    return power
 
 
 # ============================================================
@@ -176,7 +278,7 @@ def prop_power_from_thrust(thrust_n: float, diameter_m: float,
 
 def motor_back_emf_constant(kv_rpm_per_v: float) -> float:
     if kv_rpm_per_v <= 0:
-        return 0
+        return 0.0
     return 60.0 / (2 * pi * kv_rpm_per_v)
 
 
@@ -189,13 +291,13 @@ def motor_current_for_torque(torque_nm: float, kv_rpm_per_v: float,
                              no_load_current_a: float = 0.0) -> float:
     kt = motor_torque_constant(kv_rpm_per_v, fuzz)
     if kt <= 0:
-        return 0
+        return 0.0
     return torque_nm / kt + no_load_current_a
 
 
 def motor_voltage_for_rpm(rpm: float, kv_rpm_per_v: float) -> float:
     if kv_rpm_per_v <= 0:
-        return 0
+        return 0.0
     return rpm / kv_rpm_per_v
 
 
@@ -247,7 +349,7 @@ def energy_wh_from_capacity(capacity_mah: float, nominal_voltage_v: float) -> fl
 
 def ideal_flight_time_minutes(energy_wh: float, avg_power_w: float) -> float:
     if avg_power_w <= 0:
-        return 0
+        return 0.0
     return (energy_wh / avg_power_w) * 60.0
 
 

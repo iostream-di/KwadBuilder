@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List
+import math
 
 import physics as phys
 from basekwad import (
@@ -56,16 +57,38 @@ def auw_kg(kwad: Kwad) -> float:
 # ============================================================
 
 def motor_rpm_from_voltage(motor: Motor, voltage_v: float) -> float:
+    """Linear RPM model (kept for reference, not used for hover)."""
     return motor.kv_rpm_per_v * voltage_v
 
 
 def static_thrust(motor: Motor, prop: Propeller, voltage_v: float, fuzz: phys.Fuzz) -> float:
-    rpm = motor_rpm_from_voltage(motor, voltage_v)
+    """
+    Static max thrust per motor using the upgraded prop model:
+    - Uses diameter, pitch, and blade count
+    - Uses nonlinear throttle→RPM at full throttle
+    Returns thrust in Newtons.
+    """
+    # Full-throttle RPM using nonlinear mapping
+    rpm = phys.rpm_under_load(
+        throttle=mid,
+        kv_rpm_per_v=motor.kv_rpm_per_v,
+        voltage_v=voltage_v,
+        current_a=0.0,  # hover solver assumes low load; refined later
+        motor_resistance_ohm=motor.resistance_ohm,
+    )
+
+
+    # Convert geometry to inches for the physics helpers
+    diameter_in = prop.diameter_m / 0.0254
+    pitch_in = prop.pitch_m / 0.0254
+    blades = getattr(prop, "blades", 2)
+
     return phys.static_thrust_simple(
-        rpm,
-        prop.diameter_m,
-        prop.pitch_m,
-        fuzz
+        rpm=rpm,
+        diameter_in=diameter_in,
+        pitch_in=pitch_in,
+        blades=blades,
+        fuzz=fuzz,
     )
 
 
@@ -78,35 +101,114 @@ def hover_thrust_required(kwad: Kwad) -> float:
 
 
 def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
+    """
+    Solve for hover throttle by matching thrust per motor to required hover thrust,
+    using the nonlinear throttle→RPM mapping and the upgraded prop model.
+    """
     thrust_needed = hover_thrust_required(kwad)
     thrust_per_motor = thrust_needed / len(kwad.motors)
 
-    max_thrust = static_thrust(kwad.motors[0], kwad.props[0], voltage_v, fuzz)
+    motor = kwad.motors[0]
+    prop = kwad.props[0]
 
-    if max_thrust <= 0:
-        return 1.0
+    diameter_in = prop.diameter_m / 0.0254
+    pitch_in = prop.pitch_m / 0.0254
+    blades = getattr(prop, "blades", 2)
 
-    return thrust_per_motor / max_thrust
+    # Binary search on throttle in [0, 1]
+    lo, hi = 0.0, 1.0
+    for _ in range(20):
+        mid = 0.5 * (lo + hi)
+
+        # RPM under load (initially assume low load; refined later)
+        rpm = phys.rpm_under_load(
+            throttle=mid,
+            kv_rpm_per_v=motor.kv_rpm_per_v,
+            voltage_v=voltage_v,
+            current_a=0.0,
+            motor_resistance_ohm=motor.resistance_ohm,
+        )
+
+        thrust = phys.static_thrust_simple(
+            rpm=rpm,
+            diameter_in=diameter_in,
+            pitch_in=pitch_in,
+            blades=blades,
+            fuzz=fuzz,
+        )
+
+        if thrust > thrust_per_motor:
+            hi = mid
+        else:
+            lo = mid
+
+    ht = 0.5 * (lo + hi)
+    return max(0.0, min(1.0, ht))
+
 
 
 # ============================================================
-# Power Model (Corrected)
+# Power Model
 # ============================================================
 
 def hover_power_total_w(kwad: Kwad, thrust_per_motor_n: float, fuzz: phys.Fuzz) -> float:
     """
-    Correct hover power model using induced power (momentum theory).
-    This produces realistic values for 5"–7" quads.
+    Hover power model using induced power (momentum theory) and
+    the upgraded prop power function (pitch + blade count).
+    Returns total electrical power in Watts.
     """
     total = 0.0
     for prop in kwad.props:
+        diameter_in = prop.diameter_m / 0.0254
+        blades = getattr(prop, "blades", 2)
+
         p = phys.prop_power_from_thrust(
-            thrust_per_motor_n,
-            prop.diameter_m,
-            fuzz
+            thrust_n=thrust_per_motor_n,
+            diameter_in=diameter_in,
+            blades=blades,
+            fuzz=fuzz,
         )
         total += p
     return total
+
+
+# ============================================================
+# Motor Current from Thrust
+# ============================================================
+
+def motor_current_from_thrust(
+    motor: Motor,
+    prop: Propeller,
+    rpm: float,
+    thrust_n: float,
+    fuzz: phys.Fuzz,
+) -> float:
+    """
+    Convert thrust → prop power → torque → motor current using motor physics.
+    """
+    # Angular velocity
+    omega = (rpm * 2.0 * math.pi) / 60.0  # rad/s
+
+    # Mechanical power from prop model
+    diameter_in = prop.diameter_m / 0.0254
+    blades = getattr(prop, "blades", 2)
+
+    p_out = phys.prop_power_from_thrust(
+        thrust_n=thrust_n,
+        diameter_in=diameter_in,
+        blades=blades,
+        fuzz=fuzz,
+    )
+
+    # Torque (Nm)
+    torque = p_out / max(omega, 1e-6)
+
+    # Motor torque constant (Nm/A)
+    kt = phys.motor_torque_constant(motor.kv_rpm_per_v, fuzz)
+
+    # Motor current (A)
+    current = torque / max(kt, 1e-9) + motor.no_load_current_a
+    return current
 
 
 # ============================================================
@@ -165,20 +267,35 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
     thrust_needed = hover_thrust_required(kwad)
     thrust_per_motor = thrust_needed / len(kwad.motors)
 
-    # Hover power (corrected)
+    # Hover power
     total_power = hover_power_total_w(kwad, thrust_per_motor, fuzz)
+
+    # Hover current via torque/current model
+    rpm_hover = rpm_hover = phys.rpm_under_load(
+        throttle=h_throttle,
+        kv_rpm_per_v=kwad.motors[0].kv_rpm_per_v,
+        voltage_v=v_full,
+        current_a=current_per_motor,
+        motor_resistance_ohm=kwad.motors[0].resistance_ohm,
+    )
+
+    current_per_motor = motor_current_from_thrust(
+        kwad.motors[0],
+        kwad.props[0],
+        rpm_hover,
+        thrust_per_motor,
+        fuzz,
+    )
+    hover_current = current_per_motor * len(kwad.motors)
 
     # Flight time
     ft = flight_time_minutes(kwad, total_power)
 
     # Thermal (approximate)
-    hover_current = total_power / v_full if v_full > 0 else 0.0
-    current_per_motor = hover_current / len(kwad.motors)
-
     motor_temp = motor_temperature_rise(kwad.motors[0], current_per_motor, 60, fuzz)
     esc_temp = esc_temperature_rise(kwad.esc, current_per_motor, 60, fuzz)
 
-    # Max thrust
+    # Max thrust (full throttle)
     max_thrust_per_motor = static_thrust(kwad.motors[0], kwad.props[0], v_full, fuzz)
     max_total = max_thrust_per_motor * len(kwad.motors)
 
