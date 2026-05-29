@@ -12,20 +12,24 @@ st.write("Play with sliders and theory to explore how an FPV build might behave.
 # Helpers – core math
 # -----------------------------
 
+def clamp01(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
 def nominal_voltage(s_cells: int) -> float:
     return 3.8 * s_cells
 
 
 def pack_internal_resistance_ohm(s_cells: int, capacity_mah: int) -> float:
-    capacity_ah = capacity_mah / 1000.0
-    base_per_cell = 0.010
-    scale = 1.0 / max(capacity_ah, 0.5)
+    capacity_ah = max(capacity_mah / 1000.0, 0.1)
+    base_per_cell = 0.018  # ~18 mΩ at 1 Ah
+    scale = (1.0 / capacity_ah) ** 1.2
     return s_cells * base_per_cell * scale
 
 
 def loaded_voltage(v_nom: float, current_a: float, r_pack: float) -> float:
     sag = current_a * r_pack
-    return max(v_nom - sag, v_nom * 0.7)
+    return max(v_nom - sag, v_nom * 0.6)
 
 
 def rpm_no_load(kv: float, voltage: float) -> float:
@@ -48,22 +52,23 @@ def pitch_speed_mps(pitch_in: float, rpm: float) -> float:
 
 def estimate_thrust_per_motor_g(diameter_in, pitch_in, blades, rpm, stator_d, stator_h):
     area = prop_disk_area(diameter_in)
+    area_ref = prop_disk_area(5.0)
+
     motor_factor = (stator_d * stator_h) / (23 * 6)
     blade_factor = 1 + (blades - 3) * 0.12
-    rpm_factor = (rpm / 40000) ** 0.9
 
-    base = 900
-    thrust = base * area / prop_disk_area(5.0)
-    thrust *= (pitch_in / 4.5) ** 0.4
-    thrust *= blade_factor
-    thrust *= motor_factor
-    thrust *= rpm_factor
+    area_term = (area / area_ref) ** 1.1
+    pitch_term = (pitch_in / 4.5) ** 0.6
+    rpm_term = (rpm / 40000.0) ** 1.05
 
-    return max(thrust, 10.0)
+    base_5in_thrust = 900.0
+    thrust = base_5in_thrust * area_term * pitch_term * blade_factor * motor_factor * rpm_term
+    return max(thrust, 5.0)
 
 
-def estimate_current_per_motor_a(thrust_g: float, efficiency_factor: float = 0.8) -> float:
-    return (thrust_g / 150.0) ** 1.25 / efficiency_factor
+def estimate_current_per_motor_a(thrust_g: float, diameter_in: float, efficiency_factor: float = 0.8) -> float:
+    size_factor = 5.0 / max(diameter_in, 1.5)
+    return ((thrust_g / 120.0) ** 1.35) * size_factor / efficiency_factor
 
 
 def estimate_flight_time_min(capacity_mah, avg_current_a):
@@ -71,10 +76,6 @@ def estimate_flight_time_min(capacity_mah, avg_current_a):
         return 0.0
     usable_mah = capacity_mah * 0.8
     return (usable_mah / 1000.0) / avg_current_a * 60.0
-
-
-def clamp01(x: float) -> float:
-    return max(0.0, min(1.0, x))
 
 
 def heat_from_current(load_current, safe_current):
@@ -144,7 +145,7 @@ def render_heat_bar(label: str, value_0_1: float):
     percent = int(value_0_1 * 100)
     indicator_pos = percent
     bar_html = f"""
-    <div style="margin-bottom:6px;">
+    <div style="margin-bottom:8px;">
       <div style="font-weight:600; margin-bottom:2px;">{label}</div>
       <div style="width: 100%; height: 22px; border-radius: 11px;
            background: linear-gradient(90deg, #7FDBFF 0%, #FFD700 50%, #FF4136 100%);
@@ -180,6 +181,7 @@ DEFAULT_BUILD = {
     "lipo_capacity": 1500,
     "lipo_c": 80,
     "auw": 700,
+    "payload_g": 0,
     "motor_count": 4,
     "fc_loop_hz": 1000,
     "frame_noise": 20,
@@ -193,7 +195,7 @@ if "build" not in st.session_state:
 
 
 # -----------------------------
-# UI – sliders (one per line)
+# UI – sliders
 # -----------------------------
 
 st.subheader("Build parameters")
@@ -217,7 +219,9 @@ stator_h = st.slider("Motor stator height (mm)", 2, 15, b["stator_h"], 1, key="s
 lipo_s = st.slider("LiPo cells (S)", 1, 8, b["lipo_s"], 1, key="lipo_s")
 lipo_capacity = st.slider("LiPo capacity (mAh)", 260, 20000, b["lipo_capacity"], 10, key="lipo_capacity")
 lipo_c = st.slider("LiPo C rating", 20, 150, b["lipo_c"], 1, key="lipo_c")
-auw = st.slider("All-up weight (g)", 15, 4000, b["auw"], 5, key="auw")
+auw = st.slider("All-up weight (g, without payload)", 15, 4000, b["auw"], 5, key="auw")
+payload_g = st.slider("Payload weight (g)", 0, 2000, b.get("payload_g", 0), 5, key="payload_g")
+effective_auw = auw + payload_g
 motor_count = st.selectbox(
     "Motor count",
     [4, 6, 8, 12],
@@ -276,6 +280,7 @@ st.session_state.build.update(
         lipo_capacity=lipo_capacity,
         lipo_c=lipo_c,
         auw=auw,
+        payload_g=payload_g,
         motor_count=motor_count,
         fc_loop_hz=fc_loop_hz,
         frame_noise=frame_noise,
@@ -287,7 +292,7 @@ st.session_state.build.update(
 
 
 # -----------------------------
-# Computations (with advanced modeling)
+# Computations
 # -----------------------------
 
 V_nom = nominal_voltage(lipo_s)
@@ -297,7 +302,7 @@ rpm_ld_nom = rpm_loaded(rpm_nl_nom)
 thrust_per_motor_nom = estimate_thrust_per_motor_g(
     prop_size, prop_pitch, prop_blades, rpm_ld_nom, stator_d, stator_h
 )
-current_per_motor_nom = estimate_current_per_motor_a(thrust_per_motor_nom)
+current_per_motor_nom = estimate_current_per_motor_a(thrust_per_motor_nom, prop_size)
 total_current_nom = current_per_motor_nom * motor_count
 
 r_pack = pack_internal_resistance_ohm(lipo_s, lipo_capacity)
@@ -309,17 +314,18 @@ thrust_per_motor_g = estimate_thrust_per_motor_g(
     prop_size, prop_pitch, prop_blades, rpm_ld, stator_d, stator_h
 )
 total_thrust_g = thrust_per_motor_g * motor_count
-twr = total_thrust_g / auw if auw > 0 else 0.0
+twr = total_thrust_g / effective_auw if effective_auw > 0 else 0.0
 
-max_payload_g = max(total_thrust_g / 2.0 - auw, 0.0)
+max_payload_g = max(total_thrust_g / 2.0 - effective_auw, 0.0)
 
 max_speed_mps = pitch_speed_mps(prop_pitch, rpm_ld)
 max_speed_mph = max_speed_mps * 2.23694
 
-current_per_motor_a = estimate_current_per_motor_a(thrust_per_motor_g)
+current_per_motor_a = estimate_current_per_motor_a(thrust_per_motor_g, prop_size)
 total_current_a = current_per_motor_a * motor_count
 
-cruise_current_a = total_current_a * 0.35
+cruise_factor = 0.35 + 0.25 * clamp01(twr / 6.0)
+cruise_current_a = total_current_a * cruise_factor
 flight_time_min = estimate_flight_time_min(lipo_capacity, cruise_current_a)
 
 battery_safe_a = (lipo_capacity / 1000.0) * lipo_c
@@ -330,18 +336,18 @@ prop_inertia_rel = prop_inertia_relative(prop_size, prop_pitch, prop_blades)
 sag_ratio = clamp01((V_nom - V_loaded) / max(V_nom, 1e-6))
 sag_severity = clamp01(sag_ratio / 0.3)
 
-# FC overheat: loop freq, noise, sag, KV
+# FC overheat
 loop_norm = math.log10(fc_loop_hz) / math.log10(8000)
 noise_norm = frame_noise / 100.0
 kv_norm = motor_kv / 30000.0
 fc_heat = clamp01(
-    0.2 * loop_norm +
+    0.25 * loop_norm +
     0.3 * noise_norm +
     0.2 * sag_severity +
-    0.3 * kv_norm
+    0.25 * kv_norm
 )
 
-# ESC overheat: current, PWM, timing, demag
+# ESC overheat
 esc_safe_a = battery_safe_a / motor_count if motor_count > 0 else 0.0
 esc_heat_current = heat_from_current(current_per_motor_a, esc_safe_a)
 
@@ -359,7 +365,7 @@ esc_heat_extra = clamp01(
 
 esc_heat = clamp01(0.6 * esc_heat_current + 0.4 * esc_heat_extra)
 
-# Motor overheat: current, inertia, rpm, cooling
+# Motor overheat
 motor_safe_current = 20.0 * (stator_d * stator_h) / (23 * 6)
 motor_current_heat = heat_from_current(current_per_motor_a, motor_safe_current)
 
@@ -369,19 +375,19 @@ inertia_norm = clamp01(prop_inertia_rel / prop_inertia_relative(5.0, 4.5, 3))
 
 motor_heat = clamp01(
     0.5 * motor_current_heat +
-    0.2 * inertia_norm +
-    0.2 * rpm_norm -
-    0.1 * cooling_factor
+    0.25 * inertia_norm +
+    0.25 * rpm_norm -
+    0.15 * cooling_factor
 )
 
-# Desync risk: high KV, high inertia, high timing, low demag, high rpm
+# Desync risk
 desync_base = clamp01(
     0.3 * kv_norm +
     0.3 * inertia_norm +
     0.2 * timing_norm +
     0.2 * rpm_norm
 )
-desync_potential = clamp01(desync_base * (1.0 + 0.3 * (1.0 - demag_norm)))
+desync_potential = clamp01(desync_base * (1.0 + 0.4 * (1.0 - demag_norm)))
 
 overall_heat = clamp01((fc_heat + esc_heat + motor_heat + desync_potential) / 4.0)
 
@@ -406,6 +412,8 @@ with colB:
     st.metric("Battery safe current", f"{battery_safe_a:0.1f} A")
     st.metric("Expected flight time", f"{flight_time_min:0.1f} min")
 
+st.metric("Effective AUW (with payload)", f"{effective_auw:0.0f} g")
+
 st.subheader("Thermal & reliability potentials")
 
 render_heat_bar("FC overheat", fc_heat)
@@ -420,7 +428,7 @@ render_heat_bar("Overall HEAT rating", overall_heat)
 # Build style
 # -----------------------------
 
-style_label = build_style_label(twr, flight_time_min, prop_size, auw, max_payload_g)
+style_label = build_style_label(twr, flight_time_min, prop_size, effective_auw, max_payload_g)
 st.subheader("Build style")
 st.write(f"**Theoretical feel:** `{style_label}`")
 
@@ -445,6 +453,7 @@ export_data = {
         "motor_heat": motor_heat,
         "desync_potential": desync_potential,
         "sag_severity": sag_severity,
+        "effective_auw_g": effective_auw,
         "style_label": style_label,
     },
 }
@@ -495,11 +504,11 @@ with st.expander("FPV Theory, Math & Community Reference", expanded=False):
 
     st.markdown("---")
     st.markdown("**4. Thrust estimation (heuristic)**")
-    st.latex(r"T \propto A \cdot Pitch^{0.4} \cdot RPM^{0.9} \cdot Blades \cdot MotorFactor")
+    st.latex(r"T \propto A^{1.1} \cdot Pitch^{0.6} \cdot RPM^{1.05} \cdot Blades \cdot MotorFactor")
 
     st.markdown("---")
     st.markdown("**5. Current draw (heuristic)**")
-    st.latex(r"I \propto \left(\frac{Thrust}{150\,g}\right)^{1.25}")
+    st.latex(r"I \propto \left(\frac{Thrust}{120\,g}\right)^{1.35} \cdot \frac{5}{D_{in}}")
 
     st.markdown("---")
     st.markdown("**6. Battery safe current**")
