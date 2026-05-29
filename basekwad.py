@@ -351,32 +351,39 @@ class Kwad:
             tuning_stress * 0.2       # tuning still matters
         )
 
-
-
-
     def overstressed_motor(self):
         if not self.motors or not self.lipo:
             return 0
+
         m = self.motors[0]
+
+        # Per‑motor thrust & current at full throttle
         thrust = m.compute_thrust(self.lipo.nominal_voltage)
         current = m.compute_current(thrust)
+
+        # Safe current based on stator volume
         safe = 20.0 * (m.stator_width * m.stator_height) / (23 * 6)
         current_heat = clamp01(current / safe) if safe > 0 else 1.0
 
-        inertia = prop_disk_area(m.prop.diameter) * m.prop.pitch * m.prop.blades
-        inertia_norm = clamp01(inertia / (prop_disk_area(5.0) * 4.5 * 3))
+        # Prop load: area * pitch * blades
+        disk = prop_disk_area(m.prop.diameter)
+        prop_load = disk * m.prop.pitch * m.prop.blades
+        ref_load = prop_disk_area(5.0) * 4.5 * 3
+        prop_load_norm = clamp01(prop_load / ref_load)
 
+        # RPM & cooling
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
         rpm_norm = clamp01(rpm / 50000.0)
-
         cooling = clamp01(m.prop.diameter / 7.0)
 
+        # Motor stress: current dominates, prop load now matters more
         return clamp01(
-            0.5 * current_heat +
-            0.25 * inertia_norm +
-            0.25 * rpm_norm -
+            0.55 * current_heat +      # main driver
+            0.25 * prop_load_norm +    # blades / pitch / diameter
+            0.20 * rpm_norm -
             0.15 * cooling
         )
+
 
     def overstressed_desync(self):
         if not self.motors or not self.esc or not self.lipo:
