@@ -385,12 +385,11 @@ class Kwad:
     def overstressed_voltage_sag(self):
         sag = self.voltage_sag()  # raw fraction, e.g. 0.05 = 5%
 
-        # Normalize sag severity realistically
-        # 0.00 → 0%
-        # 0.03 → 25%
-        # 0.07 → 50%
-        # 0.12 → 100%
-        return clamp01((sag - 0.03) / (0.12 - 0.03))
+        # Realistic sag severity normalization:
+        # 0.00–0.03 → minimal severity
+        # 0.03–0.12 → linear ramp to 100%
+        # 0.12+     → fully severe
+        return clamp01(max(0.0, (sag - 0.03) / 0.09))
 
 
     def overstressed_overall(self):
