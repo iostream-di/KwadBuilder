@@ -393,8 +393,7 @@ class Kwad:
         kv_ref = 1950.0  # baseline for 5" freestyle
         kv_ratio = m.kv / kv_ref
 
-        # Exponential curve: 1.0 → 0, 1.2 → 0.3, 1.3 → 0.55, 1.4 → 0.8, 1.5 → 1.0
-        kv_factor = clamp01((kv_ratio - 1.0) ** 1.7)
+        kv_factor = clamp01((kv_ratio - 1.0) / 0.30)  # 30% above baseline = full KV stress
 
 
         # RPM & cooling as secondary modifiers
