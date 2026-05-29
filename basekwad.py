@@ -125,7 +125,7 @@ class LiPo:
         return base * ir_multiplier
 
     def usable_mah(self):
-        return self.capacity * 0.8 * self.health
+        return self.capacity * 0.9 * self.health
 
 
 class Frame:
