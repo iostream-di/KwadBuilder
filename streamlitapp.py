@@ -5,7 +5,7 @@ import streamlit as st
 st.set_page_config(page_title="Theoretical FPV Build Explorer", layout="centered")
 
 st.title("Theoretical FPV Build Explorer")
-st.write("Play with sliders, presets, and theory to explore how an FPV build might behave.")
+st.write("Play with sliders and theory to explore how an FPV build might behave.")
 
 
 # -----------------------------
@@ -17,7 +17,6 @@ def nominal_voltage(s_cells: int) -> float:
 
 
 def pack_internal_resistance_ohm(s_cells: int, capacity_mah: int) -> float:
-    # Very rough: bigger packs → lower IR
     capacity_ah = capacity_mah / 1000.0
     base_per_cell = 0.010  # 10 mΩ per cell baseline
     scale = 1.0 / max(capacity_ah, 0.5)
@@ -109,7 +108,6 @@ def esc_thermal_response(load_current_a: float, esc_rating_a: float) -> float:
 
 
 def build_style_label(twr, flight_time, prop_size, auw, max_payload_g):
-    # Adjective from TWR
     if twr < 2:
         adjective = "Mild"
     elif twr < 4:
@@ -181,7 +179,7 @@ def colored_percentage(label, value):
 
 
 # -----------------------------
-# Presets & session state
+# Session state & defaults
 # -----------------------------
 
 PROP_SIZE_OPTIONS = [
@@ -204,119 +202,8 @@ DEFAULT_BUILD = {
     "motor_count": 4,
 }
 
-PRESETS = {
-    "5\" Freestyle": {
-        "prop_size": 5.0,
-        "prop_pitch": 4.3,
-        "prop_blades": 3,
-        "motor_kv": 1950,
-        "stator_d": 23,
-        "stator_h": 6,
-        "lipo_s": 6,
-        "lipo_capacity": 1300,
-        "lipo_c": 80,
-        "auw": 700,
-        "motor_count": 4,
-    },
-    "5\" Racing": {
-        "prop_size": 5.0,
-        "prop_pitch": 4.9,
-        "prop_blades": 3,
-        "motor_kv": 2200,
-        "stator_d": 22,
-        "stator_h": 7,
-        "lipo_s": 6,
-        "lipo_capacity": 1200,
-        "lipo_c": 100,
-        "auw": 550,
-        "motor_count": 4,
-    },
-    "7\" Long Range": {
-        "prop_size": 7.0,
-        "prop_pitch": 4.0,
-        "prop_blades": 2,
-        "motor_kv": 1500,
-        "stator_d": 25,
-        "stator_h": 6,
-        "lipo_s": 6,
-        "lipo_capacity": 3000,
-        "lipo_c": 60,
-        "auw": 900,
-        "motor_count": 4,
-    },
-    "3\" Cinewhoop": {
-        "prop_size": 3.0,
-        "prop_pitch": 3.0,
-        "prop_blades": 5,
-        "motor_kv": 3800,
-        "stator_d": 14,
-        "stator_h": 7,
-        "lipo_s": 4,
-        "lipo_capacity": 850,
-        "lipo_c": 75,
-        "auw": 260,
-        "motor_count": 4,
-    },
-    "Toothpick 2.5\"": {
-        "prop_size": 2.5,
-        "prop_pitch": 2.5,
-        "prop_blades": 2,
-        "motor_kv": 11000,
-        "stator_d": 11,
-        "stator_h": 3,
-        "lipo_s": 2,
-        "lipo_capacity": 450,
-        "lipo_c": 70,
-        "auw": 80,
-        "motor_count": 4,
-    },
-    "Kamikaze Example": {
-        "prop_size": 8.0,
-        "prop_pitch": 4.5,
-        "prop_blades": 3,
-        "motor_kv": 1200,
-        "stator_d": 28,
-        "stator_h": 7,
-        "lipo_s": 6,
-        "lipo_capacity": 6000,
-        "lipo_c": 60,
-        "auw": 1500,
-        "motor_count": 4,
-    },
-    "Utility Example": {
-        "prop_size": 12.0,
-        "prop_pitch": 4.0,
-        "prop_blades": 2,
-        "motor_kv": 900,
-        "stator_d": 35,
-        "stator_h": 8,
-        "lipo_s": 6,
-        "lipo_capacity": 10000,
-        "lipo_c": 60,
-        "auw": 2000,
-        "motor_count": 4,
-    },
-}
-
 if "build" not in st.session_state:
     st.session_state.build = DEFAULT_BUILD.copy()
-
-
-def apply_preset(name):
-    st.session_state.build = PRESETS[name].copy()
-    st.experimental_rerun()
-
-
-# -----------------------------
-# Preset buttons
-# -----------------------------
-
-st.subheader("Presets")
-preset_cols = st.columns(len(PRESETS))
-for col, name in zip(preset_cols, PRESETS.keys()):
-    with col:
-        if st.button(name):
-            apply_preset(name)
 
 
 # -----------------------------
@@ -327,9 +214,8 @@ st.subheader("Build parameters")
 
 b = st.session_state.build
 
-# Ensure prop size is valid; if not, fall back to nearest option
+# Ensure prop size is valid; if not, snap to nearest option
 if b["prop_size"] not in PROP_SIZE_OPTIONS:
-    # Find nearest allowed size
     b["prop_size"] = min(PROP_SIZE_OPTIONS, key=lambda x: abs(x - b["prop_size"]))
 
 prop_size = st.selectbox(
@@ -338,7 +224,6 @@ prop_size = st.selectbox(
     index=PROP_SIZE_OPTIONS.index(b["prop_size"]),
     key="prop_size",
 )
-
 prop_pitch = st.slider("Prop pitch (inches)", 0.8, 8.0, b["prop_pitch"], 0.1, key="prop_pitch")
 prop_blades = st.slider("Prop blades", 2, 8, b["prop_blades"], 1, key="prop_blades")
 motor_kv = st.slider("Motor KV", 300, 30000, b["motor_kv"], 50, key="motor_kv")
@@ -347,7 +232,7 @@ stator_h = st.slider("Motor stator height (mm)", 2, 15, b["stator_h"], 1, key="s
 lipo_s = st.slider("LiPo cells (S)", 1, 8, b["lipo_s"], 1, key="lipo_s")
 lipo_capacity = st.slider("LiPo capacity (mAh)", 260, 20000, b["lipo_capacity"], 10, key="lipo_capacity")
 lipo_c = st.slider("LiPo C rating", 20, 150, b["lipo_c"], 1, key="lipo_c")
-auw = st.slider("All-up weight (g)", 15, 2000, b["auw"], 5, key="auw")
+auw = st.slider("All-up weight (g)", 15, 4000, b["auw"], 5, key="auw")
 motor_count = st.selectbox(
     "Motor count",
     [4, 6, 8, 12],
@@ -550,154 +435,153 @@ st.download_button(
 
 
 # -----------------------------
-# FPV THEORY & FORMULAS SECTION
+# FPV THEORY & FORMULAS SECTION (expandable)
 # -----------------------------
 
-st.header("FPV Theory, Math & Community Reference")
+with st.expander("FPV Theory, Math & Community Reference", expanded=False):
 
-st.subheader("Core math formulas used")
+    st.subheader("Core math formulas used")
 
-st.markdown("**1. Motor RPM**")
-st.latex(r"RPM_{NL} = KV \cdot V")
-st.latex(r"RPM_{L} \approx RPM_{NL} \cdot 0.78")
+    st.markdown("**1. Motor RPM**")
+    st.latex(r"RPM_{NL} = KV \cdot V")
+    st.latex(r"RPM_{L} \approx RPM_{NL} \cdot 0.78")
 
-st.markdown("---")
-st.markdown("**2. Pitch speed (ideal, no drag)**")
-st.latex(r"V_{pitch} = Pitch_{in} \cdot 0.0254 \cdot \frac{RPM}{60}")
+    st.markdown("---")
+    st.markdown("**2. Pitch speed (ideal, no drag)**")
+    st.latex(r"V_{pitch} = Pitch_{in} \cdot 0.0254 \cdot \frac{RPM}{60}")
 
-st.markdown("---")
-st.markdown("**3. Prop disk area**")
-st.latex(r"A = \pi r^2 = \pi \left(\frac{D_{in} \cdot 0.0254}{2}\right)^2")
+    st.markdown("---")
+    st.markdown("**3. Prop disk area**")
+    st.latex(r"A = \pi r^2 = \pi \left(\frac{D_{in} \cdot 0.0254}{2}\right)^2")
 
-st.markdown("---")
-st.markdown("**4. Thrust estimation (heuristic)**")
-st.latex(r"T \propto A \cdot Pitch^{0.4} \cdot RPM^{0.9} \cdot Blades \cdot MotorFactor")
+    st.markdown("---")
+    st.markdown("**4. Thrust estimation (heuristic)**")
+    st.latex(r"T \propto A \cdot Pitch^{0.4} \cdot RPM^{0.9} \cdot Blades \cdot MotorFactor")
 
-st.markdown("---")
-st.markdown("**5. Current draw (heuristic)**")
-st.latex(r"I \propto \left(\frac{Thrust}{150\,g}\right)^{1.25}")
+    st.markdown("---")
+    st.markdown("**5. Current draw (heuristic)**")
+    st.latex(r"I \propto \left(\frac{Thrust}{150\,g}\right)^{1.25}")
 
-st.markdown("---")
-st.markdown("**6. Battery safe current**")
-st.latex(r"I_{\text{safe}} = C \cdot Ah")
+    st.markdown("---")
+    st.markdown("**6. Battery safe current**")
+    st.latex(r"I_{\text{safe}} = C \cdot Ah")
 
-st.markdown("---")
-st.markdown("**7. Flight time estimate**")
-st.latex(r"t = \frac{0.8 \cdot Capacity_{Ah}}{I_{\text{cruise}}} \cdot 60")
+    st.markdown("---")
+    st.markdown("**7. Flight time estimate**")
+    st.latex(r"t = \frac{0.8 \cdot Capacity_{Ah}}{I_{\text{cruise}}} \cdot 60")
 
-st.markdown("---")
-st.markdown("**8. Thrust-to-weight ratio**")
-st.latex(r"TWR = \frac{T_{\text{total}}}{W}")
+    st.markdown("---")
+    st.markdown("**8. Thrust-to-weight ratio**")
+    st.latex(r"TWR = \frac{T_{\text{total}}}{W}")
 
-st.markdown("---")
-st.markdown("**9. Motor torque constant**")
-st.latex(r"K_t \,[Nm/A] \approx \frac{60}{2\pi \cdot KV}")
+    st.markdown("---")
+    st.markdown("**9. Motor torque constant**")
+    st.latex(r"K_t \,[Nm/A] \approx \frac{60}{2\pi \cdot KV}")
 
-st.markdown("---")
-st.markdown("**10. Prop inertia (relative)**")
-st.latex(r"I_{\text{prop}} \propto A \cdot Pitch \cdot Blades")
+    st.markdown("---")
+    st.markdown("**10. Prop inertia (relative)**")
+    st.latex(r"I_{\text{prop}} \propto A \cdot Pitch \cdot Blades")
 
+    st.subheader("Community reference values")
 
-st.subheader("Community reference values")
+    st.markdown("**Typical loaded RPM ranges**")
+    st.table({
+        "Build Type": [
+            "Whoop (1–2\")",
+            "Toothpick (2.5–3\")",
+            "3\" Freestyle",
+            "5\" Freestyle",
+            "5\" Racing",
+            "7\" Long Range",
+            "Kamikaze",
+            "Utility",
+        ],
+        "Prop Size": [
+            "1.6–2.0\"",
+            "2.5–3.0\"",
+            "3.0\"",
+            "5.0\"",
+            "5.0\"",
+            "7.0\"",
+            "7–10\"",
+            "7–17\"",
+        ],
+        "Loaded RPM Range": [
+            "28,000–45,000",
+            "32,000–48,000",
+            "38,000–48,000",
+            "28,000–36,000",
+            "34,000–42,000",
+            "18,000–26,000",
+            "18,000–26,000",
+            "12,000–22,000",
+        ],
+    })
 
-st.markdown("**Typical loaded RPM ranges**")
-st.table({
-    "Build Type": [
-        "Whoop (1–2\")",
-        "Toothpick (2.5–3\")",
-        "3\" Freestyle",
-        "5\" Freestyle",
-        "5\" Racing",
-        "7\" Long Range",
-        "Kamikaze",
-        "Utility",
-    ],
-    "Prop Size": [
-        "1.6–2.0\"",
-        "2.5–3.0\"",
-        "3.0\"",
-        "5.0\"",
-        "5.0\"",
-        "7.0\"",
-        "7–10\"",
-        "7–17\"",
-    ],
-    "Loaded RPM Range": [
-        "28,000–45,000",
-        "32,000–48,000",
-        "38,000–48,000",
-        "28,000–36,000",
-        "34,000–42,000",
-        "18,000–26,000",
-        "18,000–26,000",
-        "12,000–22,000",
-    ],
-})
+    st.markdown("---")
+    st.markdown("**Typical AUW by build type**")
+    st.table({
+        "Build Type": [
+            "Whoop",
+            "Toothpick",
+            "3\" Freestyle",
+            "5\" Freestyle",
+            "5\" Racing",
+            "7\" Long Range",
+            "Cinewhoop (3–3.5\")",
+            "Kamikaze",
+            "Utility",
+        ],
+        "AUW Range": [
+            "20–45 g",
+            "55–120 g",
+            "120–200 g",
+            "650–800 g",
+            "430–550 g",
+            "650–1100 g",
+            "180–320 g",
+            "1000–2000 g",
+            "1500–4000 g (or more)",
+        ],
+    })
 
-st.markdown("---")
-st.markdown("**Typical AUW by build type**")
-st.table({
-    "Build Type": [
-        "Whoop",
-        "Toothpick",
-        "3\" Freestyle",
-        "5\" Freestyle",
-        "5\" Racing",
-        "7\" Long Range",
-        "Cinewhoop (3–3.5\")",
-        "Kamikaze",
-        "Utility",
-    ],
-    "AUW Range": [
-        "20–45 g",
-        "55–120 g",
-        "120–200 g",
-        "650–800 g",
-        "430–550 g",
-        "650–1100 g",
-        "180–320 g",
-        "1000–2000 g",
-        "1500–4000 g (or more)",
-    ],
-})
-
-st.markdown("---")
-st.markdown("**Typical TWR ranges**")
-st.table({
-    "Build Type": [
-        "Whoop",
-        "Toothpick",
-        "3\" Freestyle",
-        "5\" Freestyle",
-        "5\" Racing",
-        "Cinematic",
-        "Kamikaze",
-        "Utility",
-        "Long Range",
-    ],
-    "TWR Range": [
-        "2–3",
-        "4–7",
-        "4–6",
-        "5–8",
-        "8–12",
-        "2–4",
-        "2.5–4",
-        "1.5–3",
-        "2–3",
-    ],
-    "Notes": [
-        "Flips, limited punch",
-        "Very high for weight",
-        "Snappy, responsive",
-        "Classic “feel good” zone",
-        "Brutal acceleration",
-        "Smooth, stable",
-        "Maneuverable with 1–2 kg payload",
-        "Heavy lift, sluggish, payload-focused",
-        "Efficiency-focused cruising",
-    ],
-})
+    st.markdown("---")
+    st.markdown("**Typical TWR ranges**")
+    st.table({
+        "Build Type": [
+            "Whoop",
+            "Toothpick",
+            "3\" Freestyle",
+            "5\" Freestyle",
+            "5\" Racing",
+            "Cinematic",
+            "Kamikaze",
+            "Utility",
+            "Long Range",
+        ],
+        "TWR Range": [
+            "2–3",
+            "4–7",
+            "4–6",
+            "5–8",
+            "8–12",
+            "2–4",
+            "2.5–4",
+            "1.5–3",
+            "2–3",
+        ],
+        "Notes": [
+            "Flips, limited punch",
+            "Very high for weight",
+            "Snappy, responsive",
+            "Classic “feel good” zone",
+            "Brutal acceleration",
+            "Smooth, stable",
+            "Maneuverable with 1–2 kg payload",
+            "Heavy lift, sluggish, payload-focused",
+            "Efficiency-focused cruising",
+        ],
+    })
 
 st.write("---")
 st.caption(
