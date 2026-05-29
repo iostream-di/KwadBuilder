@@ -56,6 +56,11 @@ class Fuzz:
     thermal_resistance_multiplier: float = 1.0
     thermal_capacitance_multiplier: float = 1.0
 
+    # Adjustments
+    thrust_coefficient_multiplier: float = 1.0
+    figure_of_merit_multiplier: float = 1.0
+    hover_power_multiplier: float = 1.0
+
 
 # ============================================================
 # Battery chemistry
@@ -137,7 +142,7 @@ def static_thrust_simple(rpm: float, diameter_m: float, pitch_m: float,
     """
     rev_s = rpm / 60.0
     rho_adj = rho * fuzz.air_density_multiplier
-    t = k_t * rho_adj * (rev_s ** 2) * (diameter_m ** 4)
+    t = k_t * fuzz.thrust_coefficient_multiplier * rho_adj * (rev_s ** 2) * (diameter_m ** 4)
     return t * fuzz.prop_thrust_multiplier
 
 
@@ -153,10 +158,16 @@ def induced_power(thrust_n: float, disk_area_m2: float,
 def prop_power_from_thrust(thrust_n: float, diameter_m: float,
                            fuzz: Fuzz,
                            rho: float = AIR_DENSITY_SEA_LEVEL,
-                           figure_of_merit: float = 0.6) -> float:
+                           figure_of_merit=0.3):
     area = disk_area_from_diameter(diameter_m)
     p_i = induced_power(thrust_n, area, fuzz, rho)
-    return p_i / max(figure_of_merit, 1e-6)
+
+    fm = max(figure_of_merit * fuzz.figure_of_merit_multiplier, 0.05)
+
+    power = p_i / fm
+
+    # Apply hover inefficiency
+    return power * fuzz.hover_power_multiplier
 
 
 # ============================================================

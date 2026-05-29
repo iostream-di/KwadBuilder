@@ -62,6 +62,9 @@ DEFAULT_5IN = {
     "fuzz_esc_loss": 1.0,
     "fuzz_thermal_r": 1.0,
     "fuzz_thermal_c": 1.0,
+    "fuzz_ct": 1.0,
+    "fuzz_fm": 1.0,
+    "fuzz_hover_power": 1.0,
 }
 
 DEFAULT_WHOOP = {
@@ -225,5 +228,8 @@ def render_inputs():
         slider_with_buttons("ESC Loss Multiplier", 0.5, 3.0, 0.01, "fuzz_esc_loss", cfg)
         slider_with_buttons("Thermal Resistance Multiplier", 0.5, 3.0, 0.01, "fuzz_thermal_r", cfg)
         slider_with_buttons("Thermal Capacitance Multiplier", 0.5, 3.0, 0.01, "fuzz_thermal_c", cfg)
+        slider_with_buttons("Thrust Coefficient Multiplier", 0.5, 2.0, 0.01, "fuzz_ct", cfg)
+        slider_with_buttons("Figure of Merit Multiplier", 0.5, 2.0, 0.01, "fuzz_fm", cfg)
+        slider_with_buttons("Hover Power Multiplier", 0.5, 3.0, 0.01, "fuzz_hover_power", cfg)
 
     return cfg

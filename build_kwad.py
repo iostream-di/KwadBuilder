@@ -153,6 +153,9 @@ def build_kwad_and_fuzz(cfg):
         esc_loss_multiplier=cfg["fuzz_esc_loss"],
         thermal_resistance_multiplier=cfg["fuzz_thermal_r"],
         thermal_capacitance_multiplier=cfg["fuzz_thermal_c"],
+        thrust_coefficient_multiplier=cfg["fuzz_ct"],
+        figure_of_merit_multiplier=cfg["fuzz_fm"],
+        hover_power_multiplier=cfg["fuzz_hover_power"],
     )
 
     return kwad, fuzz
