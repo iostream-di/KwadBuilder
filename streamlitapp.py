@@ -1,18 +1,32 @@
-import streamlit as st
 import math
+import json
+import streamlit as st
 
 st.set_page_config(page_title="Theoretical FPV Build Explorer", layout="centered")
 
 st.title("🛠️ Theoretical FPV Build Explorer")
-st.write("Play with sliders to get a **feel** for how a build might behave.")
+st.write("Play with sliders, presets, and theory to explore how an FPV build might behave.")
 
 
 # -----------------------------
-# Helper functions
+# Helpers – core math
 # -----------------------------
 
 def nominal_voltage(s_cells: int) -> float:
     return 3.8 * s_cells
+
+
+def pack_internal_resistance_ohm(s_cells: int, capacity_mah: int) -> float:
+    # Very rough: bigger packs → lower IR
+    capacity_ah = capacity_mah / 1000.0
+    base_per_cell = 0.010  # 10 mΩ per cell baseline
+    scale = 1.0 / max(capacity_ah, 0.5)
+    return s_cells * base_per_cell * scale
+
+
+def loaded_voltage(v_nom: float, current_a: float, r_pack: float) -> float:
+    sag = current_a * r_pack
+    return max(v_nom - sag, v_nom * 0.7)
 
 
 def rpm_no_load(kv: float, voltage: float) -> float:
@@ -76,6 +90,27 @@ def heat_from_current(load_current, safe_current):
         return clamp01(0.7 + 0.3 * ((ratio - 1.0) / 0.5))
 
 
+def motor_kt_nm_per_a(kv_rpm_per_v: float) -> float:
+    # Kt [Nm/A] ≈ 60 / (2π * KV)
+    if kv_rpm_per_v <= 0:
+        return 0.0
+    return 60.0 / (2 * math.pi * kv_rpm_per_v)
+
+
+def prop_inertia_relative(diameter_in: float, pitch_in: float, blades: int) -> float:
+    # Relative inertia ~ area * pitch * blades
+    area = prop_disk_area(diameter_in)
+    return area * pitch_in * blades
+
+
+def esc_thermal_response(load_current_a: float, esc_rating_a: float) -> float:
+    # Simple I^2 scaling vs rating
+    if esc_rating_a <= 0:
+        return 1.0
+    ratio = (load_current_a ** 2) / (esc_rating_a ** 2)
+    return clamp01(0.4 * ratio)
+
+
 def build_style_label(twr, flight_time, prop_size, auw):
     if twr < 2:
         adjective = "Mild"
@@ -86,7 +121,10 @@ def build_style_label(twr, flight_time, prop_size, auw):
     else:
         adjective = "Extreme"
 
-    if prop_size <= 2.5 and auw < 80:
+    # Toothpick first
+    if prop_size <= 3.0 and auw < 120 and twr > 4:
+        style = "Toothpick"
+    elif prop_size <= 2.5 and auw < 80:
         style = "Whoop"
     elif prop_size <= 3.5 and auw < 200:
         style = "Freestyle"
@@ -130,32 +168,172 @@ def colored_percentage(label, value):
 
 
 # -----------------------------
+# Presets & session state
+# -----------------------------
+
+DEFAULT_BUILD = {
+    "prop_size": 5.0,
+    "prop_pitch": 4.5,
+    "prop_blades": 3,
+    "motor_kv": 1950,
+    "stator_d": 23,
+    "stator_h": 6,
+    "lipo_s": 6,
+    "lipo_capacity": 1500,
+    "lipo_c": 80,
+    "auw": 700,
+    "motor_count": 4,
+}
+
+PRESETS = {
+    "5\" Freestyle": {
+        "prop_size": 5.0,
+        "prop_pitch": 4.3,
+        "prop_blades": 3,
+        "motor_kv": 1950,
+        "stator_d": 23,
+        "stator_h": 6,
+        "lipo_s": 6,
+        "lipo_capacity": 1300,
+        "lipo_c": 80,
+        "auw": 700,
+        "motor_count": 4,
+    },
+    "5\" Racing": {
+        "prop_size": 5.0,
+        "prop_pitch": 4.9,
+        "prop_blades": 3,
+        "motor_kv": 2200,
+        "stator_d": 22,
+        "stator_h": 7,
+        "lipo_s": 6,
+        "lipo_capacity": 1200,
+        "lipo_c": 100,
+        "auw": 550,
+        "motor_count": 4,
+    },
+    "7\" Long Range": {
+        "prop_size": 7.0,
+        "prop_pitch": 4.0,
+        "prop_blades": 2,
+        "motor_kv": 1500,
+        "stator_d": 25,
+        "stator_h": 6,
+        "lipo_s": 6,
+        "lipo_capacity": 3000,
+        "lipo_c": 60,
+        "auw": 900,
+        "motor_count": 4,
+    },
+    "3\" Cinewhoop": {
+        "prop_size": 3.0,
+        "prop_pitch": 3.0,
+        "prop_blades": 5,
+        "motor_kv": 3800,
+        "stator_d": 14,
+        "stator_h": 7,
+        "lipo_s": 4,
+        "lipo_capacity": 850,
+        "lipo_c": 75,
+        "auw": 260,
+        "motor_count": 4,
+    },
+    "Toothpick 2.5\"": {
+        "prop_size": 2.5,
+        "prop_pitch": 2.5,
+        "prop_blades": 2,
+        "motor_kv": 11000,
+        "stator_d": 11,
+        "stator_h": 3,
+        "lipo_s": 2,
+        "lipo_capacity": 450,
+        "lipo_c": 70,
+        "auw": 80,
+        "motor_count": 4,
+    },
+}
+
+if "build" not in st.session_state:
+    st.session_state.build = DEFAULT_BUILD.copy()
+
+
+def apply_preset(name):
+    st.session_state.build = PRESETS[name].copy()
+    st.experimental_rerun()
+
+
+# -----------------------------
+# Preset buttons
+# -----------------------------
+
+st.subheader("Presets")
+preset_cols = st.columns(len(PRESETS))
+for col, name in zip(preset_cols, PRESETS.keys()):
+    with col:
+        if st.button(name):
+            apply_preset(name)
+
+
+# -----------------------------
 # UI – sliders (one per line)
 # -----------------------------
 
 st.subheader("Build parameters")
 
-prop_size = st.slider("Prop size (inches)", 1.0, 8.0, 5.0, 0.5)
-prop_pitch = st.slider("Prop pitch (inches)", 0.8, 8.0, 4.5, 0.1)
-prop_blades = st.slider("Prop blades", 2, 8, 3, 1)
-motor_kv = st.slider("Motor KV", 300, 30000, 1950, 50)
-stator_d = st.slider("Motor stator diameter (mm)", 7, 52, 23, 1)
-stator_h = st.slider("Motor stator height (mm)", 2, 15, 6, 1)
-lipo_s = st.slider("LiPo cells (S)", 1, 8, 6, 1)
-lipo_capacity = st.slider("LiPo capacity (mAh)", 260, 20000, 1500, 10)
-lipo_c = st.slider("LiPo C rating", 20, 150, 80, 1)
-auw = st.slider("All-up weight (g)", 15, 2000, 700, 5)
-motor_count = st.selectbox("Motor count", [4, 6, 8, 12], index=0)
+b = st.session_state.build
+
+prop_size = st.slider("Prop size (inches)", 1.0, 8.0, b["prop_size"], 0.5, key="prop_size")
+prop_pitch = st.slider("Prop pitch (inches)", 0.8, 8.0, b["prop_pitch"], 0.1, key="prop_pitch")
+prop_blades = st.slider("Prop blades", 2, 8, b["prop_blades"], 1, key="prop_blades")
+motor_kv = st.slider("Motor KV", 300, 30000, b["motor_kv"], 50, key="motor_kv")
+stator_d = st.slider("Motor stator diameter (mm)", 7, 52, b["stator_d"], 1, key="stator_d")
+stator_h = st.slider("Motor stator height (mm)", 2, 15, b["stator_h"], 1, key="stator_h")
+lipo_s = st.slider("LiPo cells (S)", 1, 8, b["lipo_s"], 1, key="lipo_s")
+lipo_capacity = st.slider("LiPo capacity (mAh)", 260, 20000, b["lipo_capacity"], 10, key="lipo_capacity")
+lipo_c = st.slider("LiPo C rating", 20, 150, b["lipo_c"], 1, key="lipo_c")
+auw = st.slider("All-up weight (g)", 15, 2000, b["auw"], 5, key="auw")
+motor_count = st.selectbox("Motor count", [4, 6, 8, 12], index=[4, 6, 8, 12].index(b["motor_count"]), key="motor_count")
+
+# Keep session_state in sync
+st.session_state.build.update(
+    dict(
+        prop_size=prop_size,
+        prop_pitch=prop_pitch,
+        prop_blades=prop_blades,
+        motor_kv=motor_kv,
+        stator_d=stator_d,
+        stator_h=stator_h,
+        lipo_s=lipo_s,
+        lipo_capacity=lipo_capacity,
+        lipo_c=lipo_c,
+        auw=auw,
+        motor_count=motor_count,
+    )
+)
 
 
 # -----------------------------
-# Computations
+# Computations (with advanced modeling)
 # -----------------------------
 
-V = nominal_voltage(lipo_s)
-rpm_nl = rpm_no_load(motor_kv, V)
+V_nom = nominal_voltage(lipo_s)
+
+# First pass: assume no sag to estimate current
+rpm_nl_nom = rpm_no_load(motor_kv, V_nom)
+rpm_ld_nom = rpm_loaded(rpm_nl_nom)
+thrust_per_motor_nom = estimate_thrust_per_motor_g(
+    prop_size, prop_pitch, prop_blades, rpm_ld_nom, stator_d, stator_h
+)
+current_per_motor_nom = estimate_current_per_motor_a(thrust_per_motor_nom)
+total_current_nom = current_per_motor_nom * motor_count
+
+# Voltage sag
+r_pack = pack_internal_resistance_ohm(lipo_s, lipo_capacity)
+V_loaded = loaded_voltage(V_nom, total_current_nom, r_pack)
+
+# Recompute with sagged voltage
+rpm_nl = rpm_no_load(motor_kv, V_loaded)
 rpm_ld = rpm_loaded(rpm_nl)
-
 thrust_per_motor_g = estimate_thrust_per_motor_g(
     prop_size, prop_pitch, prop_blades, rpm_ld, stator_d, stator_h
 )
@@ -175,17 +353,44 @@ flight_time_min = estimate_flight_time_min(lipo_capacity, cruise_current_a)
 
 battery_safe_a = (lipo_capacity / 1000.0) * lipo_c
 
+# Advanced: Kt, inertia, desync
+kt = motor_kt_nm_per_a(motor_kv)
+prop_inertia_rel = prop_inertia_relative(prop_size, prop_pitch, prop_blades)
+desync_potential = clamp01(
+    0.2
+    + 0.4 * (motor_kv / 30000)
+    + 0.2 * (prop_pitch / 8.0)
+    + 0.2 * (prop_inertia_rel / prop_inertia_relative(5.0, 4.5, 3))
+)
+
+# FC, ESC, motor heat
 fc_heat = clamp01(0.1 + 0.2 * (lipo_s - 1) / 7 + 0.2 * (motor_kv / 30000))
+
 esc_safe_a = battery_safe_a / motor_count
-esc_heat = heat_from_current(current_per_motor_a, esc_safe_a)
+esc_heat_current = heat_from_current(current_per_motor_a, esc_safe_a)
+esc_heat_thermal = esc_thermal_response(current_per_motor_a, esc_safe_a)
+esc_heat = clamp01(0.5 * esc_heat_current + 0.5 * esc_heat_thermal)
+
 motor_heat = heat_from_current(current_per_motor_a, 25.0)
-desync_potential = clamp01(0.2 + 0.4 * (motor_kv / 30000) + 0.2 * (prop_pitch / 8.0))
 
 overall_heat = clamp01((fc_heat + esc_heat + motor_heat + desync_potential) / 4.0)
 
 
+# Dynamic TWR vs throttle
+def twr_at_throttle(throttle: float) -> float:
+    # throttle in [0,1]
+    thrust = total_thrust_g * (throttle ** 1.1)
+    return thrust / auw if auw > 0 else 0.0
+
+
+twr_curve = {
+    "Throttle %": [25, 50, 75, 100],
+    "TWR": [twr_at_throttle(x / 100.0) for x in [25, 50, 75, 100]],
+}
+
+
 # -----------------------------
-# Output
+# Output – main metrics
 # -----------------------------
 
 st.subheader("Theoretical metrics")
@@ -203,7 +408,6 @@ with colB:
     st.metric("Cruise current (est.)", f"{cruise_current_a:0.1f} A")
     st.metric("Battery safe current", f"{battery_safe_a:0.1f} A")
     st.metric("Expected flight time", f"{flight_time_min:0.1f} min")
-
 
 st.subheader("Thermal & reliability potentials")
 
@@ -247,3 +451,245 @@ heat_bar_html = f"""
 """
 
 st.markdown(heat_bar_html, unsafe_allow_html=True)
+
+
+# -----------------------------
+# Dynamic TWR curve
+# -----------------------------
+
+with st.expander("Dynamic TWR vs throttle"):
+    st.line_chart(twr_curve, x="Throttle %", y="TWR")
+    st.caption("TWR is estimated at different throttle levels using a simple non-linear scaling.")
+
+
+# -----------------------------
+# Export build profile
+# -----------------------------
+
+st.subheader("Export build profile")
+
+export_data = {
+    "build": st.session_state.build,
+    "metrics": {
+        "max_speed_kph": max_speed_kph,
+        "total_thrust_g": total_thrust_g,
+        "twr": twr,
+        "max_payload_g": max_payload_g,
+        "flight_time_min": flight_time_min,
+        "overall_heat": overall_heat,
+        "style_label": style_label,
+    },
+}
+
+export_json = json.dumps(export_data, indent=2)
+st.download_button(
+    label="Download current build as JSON",
+    data=export_json,
+    file_name="fpv_build_profile.json",
+    mime="application/json",
+)
+
+
+# -----------------------------
+# FPV THEORY & FORMULAS SECTION
+# -----------------------------
+
+st.header("📘 FPV Theory, Math & Community Reference")
+
+st.markdown(r"""
+## 🧮 Core Math Formulas Used
+
+### 1. Motor RPM
+**No‑load RPM:**
+
+
+\[
+RPM_{NL} = KV \times V
+\]
+
+
+
+**Loaded RPM (typical 70–80% of no‑load):**
+
+
+\[
+RPM_{L} \approx RPM_{NL} \times 0.78
+\]
+
+
+
+---
+
+### 2. Pitch Speed (ideal, no drag)
+
+
+\[
+V_{pitch} = Pitch_{in} \times 0.0254 \times \frac{RPM}{60}
+\]
+
+
+
+---
+
+### 3. Prop Disk Area
+
+
+\[
+A = \pi r^2 = \pi \left(\frac{D_{in} \times 0.0254}{2}\right)^2
+\]
+
+
+
+---
+
+### 4. Thrust Estimation (heuristic)
+
+
+\[
+T \propto A \cdot Pitch^{0.4} \cdot RPM^{0.9} \cdot Blades \cdot MotorFactor
+\]
+
+
+
+---
+
+### 5. Current Draw (heuristic)
+
+
+\[
+I \propto \left(\frac{Thrust}{150g}\right)^{1.25}
+\]
+
+
+
+---
+
+### 6. Battery Safe Current
+
+
+\[
+I_{safe} = C \times Ah
+\]
+
+
+
+---
+
+### 7. Flight Time Estimate
+
+
+\[
+t = \frac{0.8 \cdot Capacity_{Ah}}{I_{cruise}} \times 60
+\]
+
+
+
+---
+
+### 8. Thrust‑to‑Weight Ratio
+
+
+\[
+TWR = \frac{TotalThrust}{AUW}
+\]
+
+
+
+---
+
+### 9. Motor Torque Constant
+
+
+\[
+K_t \,[Nm/A] \approx \frac{60}{2\pi \cdot KV}
+\]
+
+
+
+Higher KV → lower \(K_t\) → less torque margin for heavy props → more desync risk.
+
+---
+
+### 10. Prop Inertia (relative)
+
+
+\[
+I_{prop} \propto A \cdot Pitch \cdot Blades
+\]
+
+
+
+Higher inertia + low torque = harder to accelerate/decellerate → more desync risk.
+
+---
+
+## 🛸 Community‑Established Reference Values
+
+### Typical Loaded RPM Ranges
+| Build Type | Prop Size | Loaded RPM Range |
+|------------|-----------|------------------|
+| Whoop (1–2") | 1.6–2.0" | 28,000–45,000 |
+| Toothpick (2.5–3") | 2.5–3.0" | 32,000–48,000 |
+| 3" Freestyle | 3.0" | 38,000–48,000 |
+| 5" Freestyle | 5.0" | 28,000–36,000 |
+| 5" Racing | 5.0" | 34,000–42,000 |
+| 7" Long Range | 7.0" | 18,000–26,000 |
+
+---
+
+### Typical AUW by Build Type
+| Build Type | AUW Range |
+|------------|-----------|
+| Whoop | 20–45 g |
+| Toothpick | 55–120 g |
+| 3" Freestyle | 120–200 g |
+| 5" Freestyle | 650–800 g |
+| 5" Racing | 430–550 g |
+| 7" Long Range | 650–1100 g |
+| Cinewhoop (3–3.5") | 180–320 g |
+
+---
+
+### Typical TWR Ranges
+| Build Type | TWR Range | Notes |
+|------------|-----------|-------|
+| Whoop | 2–3 | Flips, limited punch |
+| Toothpick | 4–7 | Very high for weight |
+| 3" Freestyle | 4–6 | Snappy, responsive |
+| 5" Freestyle | 5–8 | Classic “feel good” zone |
+| 5" Racing | 8–12 | Brutal acceleration |
+| Cinematic | 2–4 | Smooth, stable |
+| Kamikaze / Bando | 6–10 | Heavy props, high heat |
+| Long Range | 2–3 | Efficiency focused |
+
+---
+
+## Build Style: Toothpick
+
+A **Toothpick** build is recognized when:
+
+- Prop size ≤ 3"  
+- AUW < 120 g  
+- TWR > 4  
+
+It appears as:
+
+`Mild Toothpick`, `Average Toothpick`, `Aggressive Toothpick`, `Extreme Toothpick`.
+
+---
+
+These models are intentionally approximate: fast, intuitive, and tuned to match community “feel” rather than lab‑grade thrust‑stand data.
+""")
+
+# End of FPV Theory Section
+# -----------------------------
+# Footer
+# -----------------------------
+
+st.write("---")
+st.caption(
+    "This FPV Build Explorer is a theoretical modeling tool. "
+    "All values are approximations tuned to community experience, not laboratory measurements. "
+    "Use this tool to understand trends, relationships, and build behavior — "
+    "but always validate with real-world testing."
+)
