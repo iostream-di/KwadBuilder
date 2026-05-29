@@ -17,12 +17,13 @@ def nominal_voltage(cells: int, hv: bool = False) -> float:
 def pack_internal_resistance_ohm(cells: int, capacity_mah: int) -> float:
     """
     Realistic IR model:
-    ~18 mΩ per cell at 1Ah, scaled by capacity^-1.2
+    ~2.5 mΩ per cell at 1Ah, scaled by capacity^-0.7
     """
     capacity_ah = max(capacity_mah / 1000.0, 0.1)
-    base_per_cell = 0.018
-    scale = (1.0 / capacity_ah) ** 1.2
+    base_per_cell = 0.0025  # 2.5 mΩ
+    scale = (1.0 / capacity_ah) ** 0.7
     return cells * base_per_cell * scale
+
 
 
 def loaded_voltage(v_nom: float, current_a: float, r_pack: float) -> float:
