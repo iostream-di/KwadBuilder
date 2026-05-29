@@ -389,16 +389,22 @@ class Kwad:
             # 0.5–0.7 range ramps from 50% to 100% stress
             current_stress = 0.5 + (ratio - 0.5) / 0.2 * 0.5
 
+        # KV stress factor: higher KV = more heat for same load
+        kv_ref = 1950.0  # baseline for 5" freestyle
+        kv_factor = clamp01((m.kv / kv_ref - 1.0) * 0.6)
+
         # RPM & cooling as secondary modifiers
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
         rpm_norm = clamp01(rpm / 50000.0)
         cooling = clamp01(m.prop.diameter / 7.0)
 
         return clamp01(
-            0.75 * current_stress +
-            0.20 * rpm_norm -
-            0.15 * cooling
+            0.70 * current_stress +
+            0.15 * rpm_norm -
+            0.10 * cooling +
+            0.25 * kv_factor
         )
+
 
     def overstressed_desync(self):
         if not self.motors or not self.esc or not self.lipo:
