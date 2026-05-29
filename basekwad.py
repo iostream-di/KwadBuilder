@@ -1,3 +1,4 @@
+# basekwad.py
 import math
 
 
@@ -103,12 +104,14 @@ class Motor:
 
 
 class LiPo:
-    def __init__(self, cells, capacity, c_rating, weight, hv=False):
+    def __init__(self, cells, capacity, c_rating, weight, hv=False, health=1.0):
         self.cells = cells
         self.capacity = capacity
         self.c_rating = c_rating
         self.weight = weight
         self.hv = hv
+        # 0.0–1.0, where 1.0 is brand new, 0.2 is very tired
+        self.health = clamp01(health)
 
     @property
     def nominal_voltage(self):
@@ -116,11 +119,19 @@ class LiPo:
 
     @property
     def safe_current(self):
-        return (self.capacity / 1000.0) * self.c_rating
+        # Health reduces safe continuous current
+        return (self.capacity / 1000.0) * self.c_rating * self.health
 
     @property
     def internal_resistance(self):
-        return pack_internal_resistance_ohm(self.cells, self.capacity)
+        # Base IR scaled by health: lower health → higher IR
+        base = pack_internal_resistance_ohm(self.cells, self.capacity)
+        ir_multiplier = 1.0 + (1.0 - self.health) * 1.5
+        return base * ir_multiplier
+
+    def usable_mah(self):
+        # Only a fraction of capacity is realistically usable, scaled by health
+        return self.capacity * 0.8 * self.health
 
 
 class Frame:
@@ -261,16 +272,65 @@ class Kwad:
         return self.max_thrust() / self.auw()
 
     # -----------------------------------------------------
+    # Hover / Flight profiles
+    # -----------------------------------------------------
+    def hover_throttle(self):
+        # Fraction of max thrust required to hover
+        if self.auw() <= 0 or self.max_thrust() <= 0:
+            return 0.0
+        return clamp01(self.auw() / self.max_thrust())
+
+    def hover_current(self):
+        return self.max_current() * self.hover_throttle()
+
+    def flight_profile_currents(self):
+        """
+        Returns a dict of mode -> current draw (A),
+        with TWR‑dependent scaling.
+        """
+        I_max = self.max_current()
+        I_hover = self.hover_current()
+        twr = self.max_twr()
+
+        if I_max <= 0 or I_hover <= 0 or twr <= 0:
+            return {
+                "Loitering": 0.0,
+                "Cruise": 0.0,
+                "Freestyle": 0.0,
+                "Racing": 0.0,
+                "Full Throttle": 0.0,
+            }
+
+        loiter = I_hover * 1.05
+        cruise = I_hover * (1.4 + 0.1 * twr)
+        freestyle = I_hover * (2.5 + 0.2 * twr)
+        racing = I_hover * (3.5 + 0.3 * twr)
+        full = I_max
+
+        return {
+            "Loitering": max(loiter, 0.0),
+            "Cruise": max(cruise, 0.0),
+            "Freestyle": max(freestyle, 0.0),
+            "Racing": max(racing, 0.0),
+            "Full Throttle": max(full, 0.0),
+        }
+
+    # -----------------------------------------------------
     # Flight time
     # -----------------------------------------------------
-    def flight_time(self):
+    def flight_time_profile(self, mode: str):
         if not self.lipo:
-            return 0
-        cruise = self.cruise_current()
-        if cruise <= 0:
-            return 0
-        usable_mah = self.lipo.capacity * 0.8
-        return (usable_mah / 1000.0) / cruise * 60.0
+            return 0.0
+        profiles = self.flight_profile_currents()
+        amps = profiles.get(mode, 0.0)
+        if amps <= 0:
+            return 0.0
+        usable_mah = self.lipo.usable_mah()
+        return (usable_mah / 1000.0) / amps * 60.0
+
+    def flight_time(self):
+        # Use "Cruise" as the representative flight time
+        return self.flight_time_profile("Cruise")
 
     # -----------------------------------------------------
     # Voltage sag
@@ -299,7 +359,7 @@ class Kwad:
             return 0
         current = self.max_current()
         safe = self.batt_safe_current() / len(self.motors)
-        current_heat = clamp01(current / safe)
+        current_heat = clamp01(current / safe) if safe > 0 else 1.0
 
         pwm_norm = (self.esc.motor_pwm - 24000) / (192000 - 24000)
         timing_map = {"low": 0.2, "med-low": 0.35, "med": 0.5, "med-high": 0.7, "high": 1.0}
@@ -311,13 +371,13 @@ class Kwad:
         return clamp01(0.6 * current_heat + 0.4 * extra)
 
     def overstressed_motor(self):
-        if not self.motors:
+        if not self.motors or not self.lipo:
             return 0
         m = self.motors[0]
         thrust = m.compute_thrust(self.lipo.nominal_voltage)
         current = m.compute_current(thrust)
         safe = 20.0 * (m.stator_width * m.stator_height) / (23 * 6)
-        current_heat = clamp01(current / safe)
+        current_heat = clamp01(current / safe) if safe > 0 else 1.0
 
         inertia = prop_disk_area(m.prop.diameter) * m.prop.pitch * m.prop.blades
         inertia_norm = clamp01(inertia / (prop_disk_area(5.0) * 4.5 * 3))
@@ -335,7 +395,7 @@ class Kwad:
         )
 
     def overstressed_desync(self):
-        if not self.motors or not self.esc:
+        if not self.motors or not self.esc or not self.lipo:
             return 0
         m = self.motors[0]
 

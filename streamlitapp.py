@@ -1,3 +1,4 @@
+# streamlitapp.py
 import json
 import streamlit as st
 from basekwad import (
@@ -31,6 +32,7 @@ DEFAULT_5IN = {
     "lipo_capacity": 1500,
     "lipo_c": 80,
     "lipo_weight": 190,
+    "lipo_health": 100,
 
     "frame_noise": 20,
     "frame_wheelbase": 225,
@@ -75,6 +77,7 @@ DEFAULT_WHOOP = {
     "lipo_capacity": 300,
     "lipo_c": 60,
     "lipo_weight": 8,
+    "lipo_health": 100,
 
     "frame_noise": 40,
     "frame_wheelbase": 65,
@@ -136,7 +139,7 @@ cfg = st.session_state.config
 
 
 # ---------------------------------------------------------
-# Helper: Slider + Text Input Combo
+# Helper: Slider + Buttons
 # ---------------------------------------------------------
 
 def slider_with_buttons(label, minv, maxv, step, key):
@@ -194,13 +197,15 @@ with st.expander("Motors", expanded=False):
     slider_with_buttons("Stator height (mm)", 2, 15, 1, "motor_stator_h")
     slider_with_buttons("Stator diameter (mm)", 5, 35, 1, "motor_stator_d")
     slider_with_buttons("Motor weight (g)", 2, 60, 1, "motor_weight")
-    cfg["motor_count"] = st.selectbox("Motor count", [4,6,8,12], index=[4,6,8,12].index(cfg["motor_count"]))
+    cfg["motor_count"] = st.selectbox("Motor count", [4, 6, 8, 12],
+                                      index=[4, 6, 8, 12].index(cfg["motor_count"]))
 
 with st.expander("Battery", expanded=False):
     slider_with_buttons("Cells (S)", 1, 8, 1, "lipo_cells")
     slider_with_buttons("Capacity (mAh)", 200, 20000, 10, "lipo_capacity")
     slider_with_buttons("C rating", 20, 150, 1, "lipo_c")
     slider_with_buttons("Battery weight (g)", 5, 600, 1, "lipo_weight")
+    slider_with_buttons("Battery Health (%)", 10, 100, 1, "lipo_health")
 
 with st.expander("Frame", expanded=False):
     slider_with_buttons("Frame noise (0–100)", 0, 100, 1, "frame_noise")
@@ -209,19 +214,32 @@ with st.expander("Frame", expanded=False):
     slider_with_buttons("Frame weight (g)", 3, 300, 1, "frame_weight")
 
 with st.expander("Flight Controller", expanded=False):
-    cfg["fc_loop"] = st.selectbox("PID loop frequency", [100,200,250,333,400,500,666,800,1000,2000,4000,8000],
-                                 index=[100,200,250,333,400,500,666,800,1000,2000,4000,8000].index(cfg["fc_loop"]))
+    cfg["fc_loop"] = st.selectbox(
+        "PID loop frequency",
+        [100, 200, 250, 333, 400, 500, 666, 800, 1000, 2000, 4000, 8000],
+        index=[100, 200, 250, 333, 400, 500, 666, 800, 1000, 2000, 4000, 8000].index(cfg["fc_loop"])
+    )
     slider_with_buttons("CPU load (%)", 10, 100, 1, "fc_cpu")
-    cfg["fc_dshot"] = st.selectbox("DShot", [300,600,1200], index=[300,600,1200].index(cfg["fc_dshot"]))
+    cfg["fc_dshot"] = st.selectbox("DShot", [300, 600, 1200],
+                                   index=[300, 600, 1200].index(cfg["fc_dshot"]))
     slider_with_buttons("FC weight (g)", 2, 20, 1, "fc_weight")
 
 with st.expander("ESC", expanded=False):
-    cfg["esc_pwm"] = st.selectbox("PWM frequency", [24000,32000,48000,96000,128000,192000],
-                                  index=[24000,32000,48000,96000,128000,192000].index(cfg["esc_pwm"]))
-    cfg["esc_demag"] = st.selectbox("Demag compensation", ["disabled","low","high"],
-                                    index=["disabled","low","high"].index(cfg["esc_demag"]))
-    cfg["esc_timing"] = st.selectbox("Timing", ["low","med-low","med","med-high","high"],
-                                     index=["low","med-low","med","med-high","high"].index(cfg["esc_timing"]))
+    cfg["esc_pwm"] = st.selectbox(
+        "PWM frequency",
+        [24000, 32000, 48000, 96000, 128000, 192000],
+        index=[24000, 32000, 48000, 96000, 128000, 192000].index(cfg["esc_pwm"])
+    )
+    cfg["esc_demag"] = st.selectbox(
+        "Demag compensation",
+        ["disabled", "low", "high"],
+        index=["disabled", "low", "high"].index(cfg["esc_demag"])
+    )
+    cfg["esc_timing"] = st.selectbox(
+        "Timing",
+        ["low", "med-low", "med", "med-high", "high"],
+        index=["low", "med-low", "med", "med-high", "high"].index(cfg["esc_timing"])
+    )
     slider_with_buttons("ESC weight (g)", 2, 40, 1, "esc_weight")
 
 with st.expander("Video System", expanded=False):
@@ -248,7 +266,14 @@ prop = Propeller(cfg["prop_diameter"], cfg["prop_pitch"], cfg["prop_blades"], cf
 motors = [Motor(cfg["motor_stator_h"], cfg["motor_stator_d"], cfg["motor_kv"], cfg["motor_weight"], prop)
           for _ in range(cfg["motor_count"])]
 
-lipo = LiPo(cfg["lipo_cells"], cfg["lipo_capacity"], cfg["lipo_c"], cfg["lipo_weight"])
+lipo = LiPo(
+    cfg["lipo_cells"],
+    cfg["lipo_capacity"],
+    cfg["lipo_c"],
+    cfg["lipo_weight"],
+    hv=False,
+    health=cfg["lipo_health"] / 100.0
+)
 frame = Frame(cfg["frame_noise"], cfg["frame_wheelbase"], cfg["frame_prop_fit"], cfg["frame_weight"])
 fc = Flight_Controller(cfg["fc_loop"], cfg["fc_cpu"], cfg["fc_dshot"], cfg["fc_weight"])
 esc = Electronic_Speed_Controller(cfg["esc_pwm"], cfg["esc_demag"], cfg["esc_timing"], cfg["esc_weight"])
@@ -285,8 +310,34 @@ with col1:
 with col2:
     st.metric("Cruise Current", f"{quad.cruise_current():.1f} A")
     st.metric("Battery Safe Current", f"{quad.batt_safe_current():.1f} A")
-    st.metric("Flight Time", f"{quad.flight_time():.1f} min")
-    st.metric("Voltage Sag", f"{quad.voltage_sag()*100:.1f} %")
+    st.metric("Flight Time (Cruise)", f"{quad.flight_time():.1f} min")
+    st.metric("Voltage Sag", f"{quad.voltage_sag() * 100:.1f} %")
+
+
+# ---------------------------------------------------------
+# Flight Time Breakdown
+# ---------------------------------------------------------
+
+with st.expander("Flight Time Breakdown", expanded=False):
+    profiles = quad.flight_profile_currents()
+    modes = ["Loitering", "Cruise", "Freestyle", "Racing", "Full Throttle"]
+
+    rows_mode = []
+    rows_current = []
+    rows_time = []
+
+    for mode in modes:
+        amps = profiles.get(mode, 0.0)
+        minutes = quad.flight_time_profile(mode)
+        rows_mode.append(mode)
+        rows_current.append(f"{amps:.1f} A")
+        rows_time.append(f"{minutes:.1f} min")
+
+    st.table({
+        "Mode": rows_mode,
+        "Current Draw": rows_current,
+        "Flight Time": rows_time,
+    })
 
 
 # ---------------------------------------------------------
@@ -356,83 +407,99 @@ with st.expander("Build Profile I/O", expanded=False):
 with st.expander("FPV Theory, Math & Community Reference", expanded=False):
 
     st.markdown("## Motor Physics")
+
+    st.latex(r"RPM_{no\_load} = KV \cdot V")
+    st.latex(r"RPM_{loaded} \approx 0.78 \cdot RPM_{no\_load}")
+    st.latex(r"\tau \propto V_{stator} = \pi \cdot \left(\frac{D}{2}\right)^2 \cdot H")
+
     st.write("""
-    - **KV × Voltage = No‑load RPM**
-    - Loaded RPM ≈ 78% of no‑load RPM
-    - Torque ∝ stator volume (diameter × height)
-    - Higher KV → more RPM, less torque
-    - Lower KV → more torque, less RPM
-    - Motor cooling improves with larger props
+    - KV determines RPM per volt.
+    - Loaded RPM is typically ~78% of no‑load RPM.
+    - Torque scales with stator volume (diameter × height).
+    - Higher KV → more RPM, less torque.
+    - Lower KV → more torque, less RPM.
     """)
 
     st.markdown("## Propeller Physics")
+
+    st.latex(r"A_{disk} = \pi \left(\frac{D}{2}\right)^2")
+    st.latex(r"Thrust \propto A_{disk}^{1.15} \cdot Pitch^{0.75} \cdot RPM^{1.15}")
+    st.latex(r"Pitch\ Speed = Pitch \cdot \frac{RPM}{60}")
+
     st.write("""
-    - Disk area = π × (diameter/2)²
-    - Thrust ∝ area^1.15 × pitch^0.75 × RPM^1.15
-    - More blades = more thrust but less efficiency
-    - Higher pitch = more speed but more current
-    - Small props are inefficient at high thrust
+    - Disk area determines thrust potential.
+    - Higher pitch increases speed but also current draw.
+    - More blades increase thrust but reduce efficiency.
+    - Small props are inefficient at high thrust.
     """)
 
     st.markdown("## Battery Physics")
+
+    st.latex(r"V_{nominal} = 3.8 \cdot S")
+    st.latex(r"I_{safe} = C \cdot Capacity_{Ah}")
+    st.latex(r"V_{sag} = I \cdot R_{internal}")
+
     st.write("""
-    - Nominal voltage = 3.8V × cells (or 4.35V for HV)
-    - Internal resistance increases sag under load
-    - Safe current = C rating × capacity (Ah)
-    - Sag = I × R
-    - High sag reduces RPM and thrust
+    - Voltage sag reduces RPM and thrust.
+    - Higher C rating reduces sag.
+    - Larger packs sag less but weigh more.
     """)
 
     st.markdown("## ESC Physics")
+
     st.write("""
-    - PWM frequency affects smoothness and heat
-    - Demag compensation prevents desync
-    - Timing affects torque and efficiency
-    - High timing = more torque, more heat
+    - Higher PWM frequency increases smoothness but can increase heat.
+    - Demag compensation prevents desync under high load.
+    - Timing affects torque and efficiency:
+        - Low timing = efficient, cooler
+        - High timing = more torque, more heat
     """)
 
     st.markdown("## Flight Controller Physics")
+
+    st.latex(r"Loop\ Frequency = \frac{1}{Loop\ Time}")
     st.write("""
-    - Higher PID loop = more responsiveness
-    - Higher CPU load increases FC heat
-    - Frame noise affects filtering load
-    - DShot rate affects motor update speed
+    - Higher loop frequency improves responsiveness.
+    - Higher CPU load increases FC heat.
+    - Frame noise affects filtering load.
+    - DShot rate affects motor update speed.
     """)
 
     st.markdown("## Build Style Definitions")
+
     st.write("""
-    - **Whoop:** 1.6–2.0\" props, <80g AUW
-    - **Toothpick:** 2.5–3\" props, <120g AUW, TWR > 4
-    - **Freestyle:** 3–5\" props, 200–800g AUW, TWR 4–8
-    - **Racing:** 5\" props, 400–600g AUW, TWR 8–12
-    - **Long Range:** 6–7\" props, TWR 2–4, flight time > 10 min
-    - **Cinewhoop:** 3–3.5\" props, ducts, stable flight
-    - **Kamikaze:** 7–10\" props, 1–2kg AUW, 6–10 min
-    - **Utility:** 7–17\" props, 1.5–4kg AUW, payload‑focused
+    - **Whoop:** 1.6–2.0" props, <80g AUW  
+    - **Toothpick:** 2.5–3" props, <120g AUW, TWR > 4  
+    - **Freestyle:** 3–5" props, 200–800g AUW, TWR 4–8  
+    - **Racing:** 5" props, 400–600g AUW, TWR 8–12  
+    - **Long Range:** 6–7" props, TWR 2–4, flight time > 10 min  
+    - **Cinewhoop:** 3–3.5" props, ducts, stable flight  
+    - **Kamikaze:** 7–10" props, 1–2kg AUW, 6–10 min  
+    - **Utility:** 7–17" props, 1.5–4kg AUW, payload‑focused  
     """)
 
     st.markdown("## Community Reference Tables")
 
     st.write("### Typical AUW Ranges")
     st.table({
-        "Build": ["Whoop","Toothpick","3\"","5\" Freestyle","5\" Racing","7\" LR","Utility"],
-        "AUW (g)": ["20–45","55–120","120–200","650–800","430–550","650–1100","1500–4000+"]
+        "Build": ["Whoop", "Toothpick", "3\"", "5\" Freestyle", "5\" Racing", "7\" LR", "Utility"],
+        "AUW (g)": ["20–45", "55–120", "120–200", "650–800", "430–550", "650–1100", "1500–4000+"]
     })
 
     st.write("### Typical TWR Ranges")
     st.table({
-        "Build": ["Whoop","Toothpick","Freestyle","Racing","Long Range","Utility"],
-        "TWR": ["2–3","4–7","5–8","8–12","2–3","1.5–3"]
+        "Build": ["Whoop", "Toothpick", "Freestyle", "Racing", "Long Range", "Utility"],
+        "TWR": ["2–3", "4–7", "5–8", "8–12", "2–3", "1.5–3"]
     })
 
     st.write("### Typical RPM Ranges")
     st.table({
-        "Build": ["Whoop","Toothpick","3\"","5\"","7\""],
-        "Loaded RPM": ["28–45k","32–48k","38–48k","28–36k","18–26k"]
+        "Build": ["Whoop", "Toothpick", "3\"", "5\"", "7\""],
+        "Loaded RPM": ["28–45k", "32–48k", "38–48k", "28–36k", "18–26k"]
     })
 
     st.write("### Typical Flight Times")
     st.table({
-        "Build": ["Whoop","Toothpick","Freestyle","Racing","Long Range"],
-        "Flight Time": ["3–5 min","3–6 min","4–7 min","1.5–3 min","12–25 min"]
+        "Build": ["Whoop", "Toothpick", "Freestyle", "Racing", "Long Range"],
+        "Flight Time": ["3–5 min", "3–6 min", "4–7 min", "1.5–3 min", "12–25 min"]
     })
