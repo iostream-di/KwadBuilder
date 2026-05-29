@@ -127,11 +127,19 @@ def disk_area_from_diameter(diameter_m: float) -> float:
 def static_thrust_simple(rpm: float, diameter_m: float, pitch_m: float,
                          fuzz: Fuzz,
                          rho: float = AIR_DENSITY_SEA_LEVEL,
-                         k_t: float = 1.0) -> float:
-    rev_s = rpm / 60
+                         k_t: float = 0.1) -> float:
+    """
+    Simple static thrust model based on momentum theory:
+
+        T ≈ C_T * ρ * n² * D⁴
+
+    where C_T ~ 0.1 for typical multirotor props.
+    """
+    rev_s = rpm / 60.0
     rho_adj = rho * fuzz.air_density_multiplier
-    t = k_t * rho_adj * (rev_s**2) * (diameter_m**4)
+    t = k_t * rho_adj * (rev_s ** 2) * (diameter_m ** 4)
     return t * fuzz.prop_thrust_multiplier
+
 
 
 def induced_power(thrust_n: float, disk_area_m2: float,
