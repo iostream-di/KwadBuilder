@@ -387,8 +387,8 @@ st.subheader("Thermal & Reliability Stress")
 heat_bar("FC Stress", quad.overstressed_fc())
 heat_bar("ESC Stress", quad.overstressed_esc())
 heat_bar("Motor Stress", quad.overstressed_motor())
-heat_bar("Desync Risk", quad.overstressed_desync())
-heat_bar("Voltage Sag Severity", quad.overstressed_voltage_sag())
+heat_bar("Desync Stress", quad.overstressed_desync())
+heat_bar("Voltage Sag Stress", quad.overstressed_voltage_sag())
 heat_bar("Overall Stress", quad.overstressed_overall())
 
 
