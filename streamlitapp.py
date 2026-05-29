@@ -145,21 +145,21 @@ def slider_with_buttons(label, minv, maxv, step, key):
     minus_key = f"{key}_minus"
     plus_key = f"{key}_plus"
 
-    # Initialize the true value
+    # Initialize authoritative value
     if value_key not in st.session_state:
         st.session_state[value_key] = cfg[key]
 
     # Layout: [-] [slider] [+]
     col_minus, col_slider, col_plus = st.columns([1, 6, 1])
 
-    # LEFT BUTTON (decrement)
+    # LEFT BUTTON
     with col_minus:
         if st.button("−", key=minus_key):
             st.session_state[value_key] = max(minv, st.session_state[value_key] - step)
 
-    # SLIDER (reads from true value)
+    # SLIDER (reads AND writes the authoritative value)
     with col_slider:
-        st.session_state[value_key] = st.slider(
+        new_slider_val = st.slider(
             label,
             min_value=minv,
             max_value=maxv,
@@ -167,8 +167,9 @@ def slider_with_buttons(label, minv, maxv, step, key):
             step=step,
             key=slider_key
         )
+        st.session_state[value_key] = new_slider_val
 
-    # RIGHT BUTTON (increment)
+    # RIGHT BUTTON
     with col_plus:
         if st.button("+", key=plus_key):
             st.session_state[value_key] = min(maxv, st.session_state[value_key] + step)
