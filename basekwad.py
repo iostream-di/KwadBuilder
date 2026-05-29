@@ -346,10 +346,11 @@ class Kwad:
         tuning_stress = clamp01(0.3 * pwm_norm + 0.4 * timing_norm + 0.3 * demag_norm)
 
         return clamp01(
-            0.7 * esc_stress +
-            0.2 * batt_stress +
-            0.1 * tuning_stress
+            esc_stress * 1.0 +        # ESC rating dominates
+            batt_stress * 0.3 +       # battery stress still matters
+            tuning_stress * 0.2       # tuning still matters
         )
+
 
 
 
