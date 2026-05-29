@@ -7,10 +7,10 @@ from basekwad import (
     Radio_Link, Action_Cam, Kwad, clamp01
 )
 
-st.set_page_config(page_title="Theoretical FPV Build Explorer", layout="centered")
+st.set_page_config(page_title="MartyMayhem's FPV Build Explorer", layout="centered")
 
 st.title("Theoretical FPV Build Explorer")
-st.write("A physics‑based quadcopter modeling tool powered by the BaseKwad engine.")
+st.write("A physics‑based quadcopter modeling tool.")
 
 
 # ---------------------------------------------------------
