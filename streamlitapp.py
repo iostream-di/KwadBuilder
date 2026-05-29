@@ -43,6 +43,8 @@ DEFAULT_5IN = {
     "fc_cpu": 60,
     "fc_dshot": 600,
     "fc_weight": 8,
+    "esc_current_rating": 45,
+
 
     "esc_pwm": 48000,
     "esc_demag": "low",
@@ -93,6 +95,8 @@ DEFAULT_WHOOP = {
     "esc_demag": "low",
     "esc_timing": "med-high",
     "esc_weight": 3,
+    "esc_current_rating": 12,
+
 
     "video_power": 25,
     "video_weight": 3,
@@ -220,6 +224,7 @@ with st.expander("Flight Controller", expanded=False):
     slider_with_buttons("FC weight (g)", 2, 20, 1, "fc_weight")
 
 with st.expander("ESC", expanded=False):
+    slider_with_buttons("ESC Current Rating (A)", 5, 80, 1, "esc_current_rating")
     cfg["esc_pwm"] = st.selectbox(
         "PWM frequency",
         [24000, 32000, 48000, 96000, 128000, 192000],
@@ -271,7 +276,13 @@ lipo = LiPo(
 )
 frame = Frame(cfg["frame_noise"], cfg["frame_wheelbase"], cfg["frame_prop_fit"], cfg["frame_weight"])
 fc = Flight_Controller(cfg["fc_loop"], cfg["fc_cpu"], cfg["fc_dshot"], cfg["fc_weight"])
-esc = Electronic_Speed_Controller(cfg["esc_pwm"], cfg["esc_demag"], cfg["esc_timing"], cfg["esc_weight"])
+esc = Electronic_Speed_Controller(
+    cfg["esc_pwm"],
+    cfg["esc_demag"],
+    cfg["esc_timing"],
+    cfg["esc_weight"],
+    current_rating=cfg["esc_current_rating"]
+)
 video = Video_System(cfg["video_power"], cfg["video_weight"], cfg["video_digital"])
 rx = Radio_Link(cfg["rx_weight"], cfg["rx_elrs"])
 cam = Action_Cam(cfg["cam_weight"])

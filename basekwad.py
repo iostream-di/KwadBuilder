@@ -144,11 +144,13 @@ class Flight_Controller:
 
 
 class Electronic_Speed_Controller:
-    def __init__(self, motor_pwm, demag_comp, timing, weight):
+    def __init__(self, motor_pwm, demag_comp, timing, weight, current_rating=45):
         self.motor_pwm = motor_pwm
         self.demag_comp = demag_comp
         self.timing = timing
         self.weight = weight
+        self.current_rating = current_rating  # NEW
+
 
 
 class All_In_One:
@@ -317,20 +319,39 @@ class Kwad:
         return clamp01(0.25 * loop_norm + 0.3 * noise_norm + 0.2 * sag_norm + 0.25)
 
     def overstressed_esc(self):
-        if not self.esc or not self.lipo:
+        if not self.esc or not self.lipo or not self.motors:
             return 0
-        current = self.max_current()
-        safe = self.lipo.safe_current / len(self.motors)
-        current_heat = clamp01(current / safe) if safe > 0 else 1.0
 
+        I_max = self.max_current()
+        motors = len(self.motors)
+
+        # Per‑motor current at full throttle
+        per_motor_current = I_max / motors
+
+        # ESC rating stress (primary)
+        esc_rating = self.esc.current_rating
+        esc_stress = clamp01(per_motor_current / esc_rating)
+
+        # Battery safe current stress (secondary)
+        batt_safe = self.lipo.safe_current / motors
+        batt_stress = clamp01(per_motor_current / batt_safe) if batt_safe > 0 else 1.0
+
+        # PWM / timing / demag influence (tertiary)
         pwm_norm = (self.esc.motor_pwm - 24000) / (192000 - 24000)
         timing_map = {"low": 0.2, "med-low": 0.35, "med": 0.5, "med-high": 0.7, "high": 1.0}
         timing_norm = timing_map.get(self.esc.timing, 0.5)
         demag_map = {"disabled": 1.0, "low": 0.7, "high": 0.3}
         demag_norm = demag_map.get(self.esc.demag_comp, 0.5)
 
-        extra = clamp01(0.3 * pwm_norm + 0.4 * timing_norm + 0.3 * demag_norm)
-        return clamp01(0.6 * current_heat + 0.4 * extra)
+        tuning_stress = clamp01(0.3 * pwm_norm + 0.4 * timing_norm + 0.3 * demag_norm)
+
+        # Weighted final stress score
+        return clamp01(
+            0.55 * esc_stress +
+            0.25 * batt_stress +
+            0.20 * tuning_stress
+        )
+
 
     def overstressed_motor(self):
         if not self.motors or not self.lipo:
