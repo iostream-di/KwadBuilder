@@ -25,7 +25,6 @@ def pack_internal_resistance_ohm(cells: int, capacity_mah: int) -> float:
     return cells * base_per_cell * scale
 
 
-
 def loaded_voltage(v_nom: float, current_a: float, r_pack: float) -> float:
     sag = current_a * r_pack
     return max(v_nom - sag, v_nom * 0.6)
@@ -68,7 +67,7 @@ class Motor:
         self.kv = kv
         self.weight = weight
         self.prop = prop
-        self.current_rating = current_rating # continuous-ish rating in amps
+        self.current_rating = current_rating  # continuous-ish rating in amps
 
     # -----------------------------------------------------
     # Thrust model (calibrated)
@@ -119,7 +118,6 @@ class LiPo:
         realistic_c = self.c_rating * 0.30   # 30% of printed C rating
         return (self.capacity / 1000.0) * realistic_c * self.health
 
-
     @property
     def internal_resistance(self):
         base = pack_internal_resistance_ohm(self.cells, self.capacity)
@@ -153,7 +151,6 @@ class Electronic_Speed_Controller:
         self.timing = timing
         self.weight = weight
         self.current_rating = current_rating  # NEW
-
 
 
 class All_In_One:
@@ -294,7 +291,8 @@ class Kwad:
         if amps <= 0:
             return 0.0
         usable_mah = self.lipo.usable_mah()
-        return (usable_mah / 1000.0) / amps * 80.0
+        # Slightly more optimistic than before (was 80.0)
+        return (usable_mah / 1000.0) / amps * 90.0
 
     def flight_time(self):
         return self.flight_time_profile("Cruise")
@@ -328,7 +326,11 @@ class Kwad:
         I_max = self.max_current()
         motors = len(self.motors)
 
-        per_motor_current = I_max / motors
+        # PWM‑dependent heating factor
+        pwm_heat = clamp01((48000 - self.esc.motor_pwm) / 48000)
+        heat_factor = 1.0 + 0.25 * pwm_heat
+
+        per_motor_current = (I_max / motors) * heat_factor
         esc_rating = self.esc.current_rating
 
         # ESC rating stress (primary, now harsh)
@@ -336,8 +338,11 @@ class Kwad:
         esc_stress = clamp01(ratio ** 2)
 
         # Battery safe current stress (secondary)
-        batt_safe = self.lipo.safe_current / motors
-        batt_stress = clamp01(per_motor_current / batt_safe) if batt_safe > 0 else 1.0
+        batt_safe = self.lipo.safe_current / motors if self.lipo.safe_current > 0 else 0
+        if batt_safe > 0:
+            batt_stress = clamp01(per_motor_current / batt_safe)
+        else:
+            batt_stress = 1.0
 
         # PWM / timing / demag influence (tertiary)
         pwm_norm = (self.esc.motor_pwm - 24000) / (192000 - 24000)
@@ -355,7 +360,7 @@ class Kwad:
         )
 
     def overstressed_motor(self):
-        if not self.motors or not self.lipo:
+        if not self.motors or not self.lipo or not self.esc:
             return 0
 
         m = self.motors[0]
@@ -364,12 +369,17 @@ class Kwad:
         thrust = m.compute_thrust(self.lipo.nominal_voltage)
         current = m.compute_current(thrust)
 
+        # PWM‑dependent heating
+        pwm_heat = clamp01((48000 - self.esc.motor_pwm) / 48000)
+        heat_factor = 1.0 + 0.25 * pwm_heat
+        heat_current = current * heat_factor
+
         # Hard over‑current: above rating → max stress
-        if current >= m.current_rating:
+        if heat_current >= m.current_rating:
             return 1.0
 
-        # Current‑based stress (dominant, non-linear)
-        ratio = current / m.current_rating
+        # Current‑based stress (dominant, harsh near high load)
+        ratio = heat_current / m.current_rating
 
         if ratio >= 0.7:
             current_stress = 1.0
@@ -378,7 +388,6 @@ class Kwad:
         else:
             # 0.5–0.7 range ramps from 50% to 100% stress
             current_stress = 0.5 + (ratio - 0.5) / 0.2 * 0.5
-
 
         # RPM & cooling as secondary modifiers
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
@@ -391,9 +400,6 @@ class Kwad:
             0.15 * cooling
         )
 
-
-
-
     def overstressed_desync(self):
         if not self.motors or not self.esc or not self.lipo:
             return 0
@@ -403,6 +409,11 @@ class Kwad:
         # Compute thrust & current
         thrust = m.compute_thrust(self.lipo.nominal_voltage)
         current = m.compute_current(thrust)
+
+        # PWM‑dependent heating for desync risk
+        pwm_heat = clamp01((48000 - self.esc.motor_pwm) / 48000)
+        heat_factor = 1.0 + 0.25 * pwm_heat
+        heat_current = current * heat_factor
 
         # RPM
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
@@ -426,8 +437,8 @@ class Kwad:
         # --- 4. PWM frequency ---
         pwm_norm = clamp01((48000 - self.esc.motor_pwm) / 48000)  # lower PWM = more risk
 
-        # --- 5. Current spikes ---
-        current_norm = clamp01(current / (m.current_rating * 1.5))
+        # --- 5. Current spikes (use heated current) ---
+        current_norm = clamp01(heat_current / (m.current_rating * 1.5))
 
         # Final weighted risk
         return clamp01(
@@ -440,6 +451,13 @@ class Kwad:
         )
 
     def overstressed_voltage_sag(self):
+        if not self.lipo:
+            return 0
+
+        # If max current exceeds battery safe current, sag risk is maxed
+        if self.max_current() > self.lipo.safe_current:
+            return 1.0
+
         sag = self.voltage_sag()  # raw fraction, e.g. 0.12 = 12%
 
         # New realistic severity curve:
@@ -447,8 +465,6 @@ class Kwad:
         # 0.05–0.25 → linear ramp
         # 0.25+     → max severity
         return clamp01((sag - 0.05) / 0.20)
-
-
 
     def overstressed_overall(self):
         return clamp01((
