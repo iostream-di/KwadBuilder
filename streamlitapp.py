@@ -143,15 +143,24 @@ def slider_with_input(label, minv, maxv, step, key):
     slider_key = f"{key}_slider"
     input_key = f"{key}_input"
 
-    # Initialize text value if missing
+    # Initialize the true value if missing
     if key not in st.session_state:
         st.session_state[key] = cfg[key]
+
+    # --- IMPORTANT ---
+    # If the slider changed last rerun, its value is already in session_state[slider_key].
+    # We must copy it into the true value BEFORE creating widgets.
+    if slider_key in st.session_state:
+        st.session_state[key] = st.session_state[slider_key]
+
+    # Clamp
+    st.session_state[key] = max(minv, min(maxv, st.session_state[key]))
 
     # Render widgets
     col1, col2 = st.columns([3, 1])
 
     with col1:
-        sval = st.slider(
+        st.slider(
             label,
             min_value=minv,
             max_value=maxv,
@@ -161,7 +170,7 @@ def slider_with_input(label, minv, maxv, step, key):
         )
 
     with col2:
-        ival = st.number_input(
+        st.number_input(
             " ",
             min_value=minv,
             max_value=maxv,
@@ -170,13 +179,9 @@ def slider_with_input(label, minv, maxv, step, key):
             key=input_key
         )
 
-    # Slider ALWAYS overrides text box
-    if sval != st.session_state[key]:
-        st.session_state[key] = sval
-        st.session_state[input_key] = sval
-
-    # Text box is the final source of truth
+    # The text box is the final source of truth
     cfg[key] = st.session_state[key]
+
 
 # ---------------------------------------------------------
 # UI Sections
