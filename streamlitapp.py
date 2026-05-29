@@ -139,28 +139,26 @@ cfg = st.session_state.config
 # Helper: Slider + Text Input Combo
 # ---------------------------------------------------------
 
-def slider_with_input(label, minv, maxv, step, key):
+def slider_with_buttons(label, minv, maxv, step, key):
     slider_key = f"{key}_slider"
-    input_key = f"{key}_input"
+    minus_key = f"{key}_minus"
+    plus_key = f"{key}_plus"
 
-    # Initialize the true value if missing
+    # Initialize the value
     if key not in st.session_state:
         st.session_state[key] = cfg[key]
 
-    # --- IMPORTANT ---
-    # If the slider changed last rerun, its value is already in session_state[slider_key].
-    # We must copy it into the true value BEFORE creating widgets.
-    if slider_key in st.session_state:
-        st.session_state[key] = st.session_state[slider_key]
+    # Layout: [-] [slider] [+]
+    col_minus, col_slider, col_plus = st.columns([1, 6, 1])
 
-    # Clamp
-    st.session_state[key] = max(minv, min(maxv, st.session_state[key]))
+    # Decrement button
+    with col_minus:
+        if st.button("−", key=minus_key):
+            st.session_state[key] = max(minv, st.session_state[key] - step)
 
-    # Render widgets
-    col1, col2 = st.columns([3, 1])
-
-    with col1:
-        st.slider(
+    # Slider (reads from session_state)
+    with col_slider:
+        st.session_state[key] = st.slider(
             label,
             min_value=minv,
             max_value=maxv,
@@ -169,55 +167,49 @@ def slider_with_input(label, minv, maxv, step, key):
             key=slider_key
         )
 
-    with col2:
-        st.number_input(
-            " ",
-            min_value=minv,
-            max_value=maxv,
-            value=st.session_state[key],
-            step=step,
-            key=input_key
-        )
+    # Increment button
+    with col_plus:
+        if st.button("+", key=plus_key):
+            st.session_state[key] = min(maxv, st.session_state[key] + step)
 
-    # The text box is the final source of truth
+    # Update cfg
     cfg[key] = st.session_state[key]
-
 
 # ---------------------------------------------------------
 # UI Sections
 # ---------------------------------------------------------
 
 with st.expander("Propeller", expanded=False):
-    slider_with_input("Diameter (in)", 1.0, 17.0, 0.1, "prop_diameter")
-    slider_with_input("Pitch (in)", 0.5, 8.0, 0.1, "prop_pitch")
-    slider_with_input("Blades", 2, 8, 1, "prop_blades")
-    slider_with_input("Prop weight (g)", 0.1, 10.0, 0.1, "prop_weight")
+    slider_with_buttons("Diameter (in)", 1.0, 17.0, 0.1, "prop_diameter")
+    slider_with_buttons("Pitch (in)", 0.5, 8.0, 0.1, "prop_pitch")
+    slider_with_buttons("Blades", 2, 8, 1, "prop_blades")
+    slider_with_buttons("Prop weight (g)", 0.1, 10.0, 0.1, "prop_weight")
 
 with st.expander("Motors", expanded=False):
-    slider_with_input("Motor KV", 500, 30000, 50, "motor_kv")
-    slider_with_input("Stator height (mm)", 2, 15, 1, "motor_stator_h")
-    slider_with_input("Stator diameter (mm)", 5, 35, 1, "motor_stator_d")
-    slider_with_input("Motor weight (g)", 2, 60, 1, "motor_weight")
+    slider_with_buttons("Motor KV", 500, 30000, 50, "motor_kv")
+    slider_with_buttons("Stator height (mm)", 2, 15, 1, "motor_stator_h")
+    slider_with_buttons("Stator diameter (mm)", 5, 35, 1, "motor_stator_d")
+    slider_with_buttons("Motor weight (g)", 2, 60, 1, "motor_weight")
     cfg["motor_count"] = st.selectbox("Motor count", [4,6,8,12], index=[4,6,8,12].index(cfg["motor_count"]))
 
 with st.expander("Battery", expanded=False):
-    slider_with_input("Cells (S)", 1, 8, 1, "lipo_cells")
-    slider_with_input("Capacity (mAh)", 200, 20000, 10, "lipo_capacity")
-    slider_with_input("C rating", 20, 150, 1, "lipo_c")
-    slider_with_input("Battery weight (g)", 5, 600, 1, "lipo_weight")
+    slider_with_buttons("Cells (S)", 1, 8, 1, "lipo_cells")
+    slider_with_buttons("Capacity (mAh)", 200, 20000, 10, "lipo_capacity")
+    slider_with_buttons("C rating", 20, 150, 1, "lipo_c")
+    slider_with_buttons("Battery weight (g)", 5, 600, 1, "lipo_weight")
 
 with st.expander("Frame", expanded=False):
-    slider_with_input("Frame noise (0–100)", 0, 100, 1, "frame_noise")
-    slider_with_input("Wheelbase (mm)", 50, 500, 1, "frame_wheelbase")
-    slider_with_input("Max prop size (in)", 1.0, 17.0, 0.1, "frame_prop_fit")
-    slider_with_input("Frame weight (g)", 3, 300, 1, "frame_weight")
+    slider_with_buttons("Frame noise (0–100)", 0, 100, 1, "frame_noise")
+    slider_with_buttons("Wheelbase (mm)", 50, 500, 1, "frame_wheelbase")
+    slider_with_buttons("Max prop size (in)", 1.0, 17.0, 0.1, "frame_prop_fit")
+    slider_with_buttons("Frame weight (g)", 3, 300, 1, "frame_weight")
 
 with st.expander("Flight Controller", expanded=False):
     cfg["fc_loop"] = st.selectbox("PID loop frequency", [100,200,250,333,400,500,666,800,1000,2000,4000,8000],
                                  index=[100,200,250,333,400,500,666,800,1000,2000,4000,8000].index(cfg["fc_loop"]))
-    slider_with_input("CPU load (%)", 10, 100, 1, "fc_cpu")
+    slider_with_buttons("CPU load (%)", 10, 100, 1, "fc_cpu")
     cfg["fc_dshot"] = st.selectbox("DShot", [300,600,1200], index=[300,600,1200].index(cfg["fc_dshot"]))
-    slider_with_input("FC weight (g)", 2, 20, 1, "fc_weight")
+    slider_with_buttons("FC weight (g)", 2, 20, 1, "fc_weight")
 
 with st.expander("ESC", expanded=False):
     cfg["esc_pwm"] = st.selectbox("PWM frequency", [24000,32000,48000,96000,128000,192000],
@@ -226,22 +218,22 @@ with st.expander("ESC", expanded=False):
                                     index=["disabled","low","high"].index(cfg["esc_demag"]))
     cfg["esc_timing"] = st.selectbox("Timing", ["low","med-low","med","med-high","high"],
                                      index=["low","med-low","med","med-high","high"].index(cfg["esc_timing"]))
-    slider_with_input("ESC weight (g)", 2, 40, 1, "esc_weight")
+    slider_with_buttons("ESC weight (g)", 2, 40, 1, "esc_weight")
 
 with st.expander("Video System", expanded=False):
-    slider_with_input("VTX power (mW)", 25, 2000, 25, "video_power")
-    slider_with_input("Video weight (g)", 2, 50, 1, "video_weight")
+    slider_with_buttons("VTX power (mW)", 25, 2000, 25, "video_power")
+    slider_with_buttons("Video weight (g)", 2, 50, 1, "video_weight")
     cfg["video_digital"] = st.checkbox("Digital video", cfg["video_digital"])
 
 with st.expander("Radio Link", expanded=False):
-    slider_with_input("Receiver weight (g)", 1, 20, 1, "rx_weight")
+    slider_with_buttons("Receiver weight (g)", 1, 20, 1, "rx_weight")
     cfg["rx_elrs"] = st.checkbox("ELRS", cfg["rx_elrs"])
 
 with st.expander("Action Camera", expanded=False):
-    slider_with_input("Action cam weight (g)", 0, 200, 1, "cam_weight")
+    slider_with_buttons("Action cam weight (g)", 0, 200, 1, "cam_weight")
 
 with st.expander("Payload", expanded=False):
-    slider_with_input("Payload weight (g)", 0, 2000, 5, "payload")
+    slider_with_buttons("Payload weight (g)", 0, 2000, 5, "payload")
 
 
 # ---------------------------------------------------------
