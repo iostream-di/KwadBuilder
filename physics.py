@@ -141,7 +141,6 @@ def static_thrust_simple(rpm: float, diameter_m: float, pitch_m: float,
     return t * fuzz.prop_thrust_multiplier
 
 
-
 def induced_power(thrust_n: float, disk_area_m2: float,
                   fuzz: Fuzz,
                   rho: float = AIR_DENSITY_SEA_LEVEL) -> float:
@@ -190,7 +189,15 @@ def motor_voltage_for_rpm(rpm: float, kv_rpm_per_v: float) -> float:
 
 
 def motor_input_power(voltage_v: float, current_a: float, fuzz: Fuzz) -> float:
-    return voltage_v * current_a * fuzz.motor_efficiency_multiplier
+    """
+    Electrical input power to the motor.
+
+    NOTE:
+    - Input power is simply V * I.
+    - Efficiency and fuzz are applied when going from input → output power,
+      not the other way around.
+    """
+    return voltage_v * current_a
 
 
 def motor_output_power(input_power_w: float, efficiency: float, fuzz: Fuzz) -> float:

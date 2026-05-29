@@ -429,34 +429,22 @@ st.subheader("Performance Metrics")
 perf = engine.evaluate_kwad(kwad, fuzz)
 
 # AUW
-auw_g = (
-    frame.dry_weight_g
-    + len(motors) * motors[0].weight_g
-    + battery.weight_g
-    + esc.weight_g
-    + fc.weight_g
-    + vtx.weight_g
-    + camera.weight_g
-    + receiver.weight_g
-    + (action_cam.weight_g if action_cam else 0.0)
-    + cfg["payload"]
-)
-mass_kg = auw_g / 1000.0
-weight_n = mass_kg * phys.GRAVITY
+auw_kg = engine.auw_kg(kwad)
+auw_g = auw_kg * 1000.0
 
-max_thrust_n = perf.max_thrust_total_n
-max_thrust_g = max_thrust_n / phys.GRAVITY * 1000.0
-twr = max_thrust_n / weight_n if weight_n > 0 else 0.0
+# Max thrust
+max_thrust_g = perf.max_thrust_total_n / phys.GRAVITY * 1000.0
 
-# Approx current at hover
+# TWR
+weight_n = auw_kg * phys.GRAVITY
+twr = perf.max_thrust_total_n / weight_n if weight_n > 0 else 0.0
+
+# Hover power & current
 v_nom = phys.pack_voltage_nominal(battery.cells_series, battery.chemistry)
 hover_power = perf.total_power_hover_w
 hover_current = hover_power / v_nom if v_nom > 0 else 0.0
 
-safe_current = battery.c_rating * (battery.capacity_mah / 1000.0)
-hover_current_per_motor = hover_current / len(motors) if motors else 0.0
-
-# Voltage sag estimate at hover
+# Voltage sag
 v_full = phys.pack_voltage_full(battery.cells_series, battery.chemistry)
 r_pack = phys.pack_internal_resistance(battery.cells_series, battery.chemistry, fuzz)
 v_sag = phys.voltage_sag_under_load(v_full, hover_current, r_pack)
@@ -478,7 +466,7 @@ with col2:
 
 
 # ---------------------------------------------------------
-# Flight Time Breakdown (Approximate)
+# Flight Time Breakdown
 # ---------------------------------------------------------
 
 with st.expander("Flight Time Breakdown", expanded=False):
@@ -536,6 +524,9 @@ def heat_bar(label, value):
 
 st.subheader("Thermal & Reliability Stress")
 
+hover_current_per_motor = hover_current / len(motors) if motors else 0.0
+safe_current = battery.c_rating * (battery.capacity_mah / 1000.0)
+
 fc_stress = cfg["fc_cpu"] / 100.0
 esc_stress = hover_current_per_motor / esc.continuous_current_a if esc.continuous_current_a > 0 else 0.0
 motor_stress = hover_current_per_motor / motors[0].max_current_a if motors and motors[0].max_current_a > 0 else 0.0
@@ -552,25 +543,27 @@ heat_bar("Overall Stress", overall_stress)
 
 
 # ---------------------------------------------------------
-# Build Style (Simple Classification)
+# Build Style Classification
 # ---------------------------------------------------------
 
 st.subheader("Build Style Classification")
 
 style = "Unknown"
-if cfg["prop_diameter"] <= 2.0 and auw_g < 80:
+d = cfg["prop_diameter"]
+
+if d <= 2.0 and auw_g < 80:
     style = "Whoop"
-elif cfg["prop_diameter"] <= 3.0 and auw_g < 120 and twr > 4:
+elif d <= 3.0 and auw_g < 120 and twr > 4:
     style = "Toothpick"
-elif 3.0 <= cfg["prop_diameter"] <= 5.2 and 200 <= auw_g <= 900 and 4 <= twr <= 8:
+elif 3.0 <= d <= 5.2 and 200 <= auw_g <= 900 and 4 <= twr <= 8:
     style = "Freestyle"
-elif 4.8 <= cfg["prop_diameter"] <= 5.3 and 350 <= auw_g <= 650 and twr >= 8:
+elif 4.8 <= d <= 5.3 and 350 <= auw_g <= 650 and twr >= 8:
     style = "Racing"
-elif 6.0 <= cfg["prop_diameter"] <= 7.5 and twr <= 4 and perf.flight_time_min > 10:
+elif 6.0 <= d <= 7.5 and twr <= 4 and perf.flight_time_min > 10:
     style = "Long Range"
-elif 2.8 <= cfg["prop_diameter"] <= 3.5 and auw_g > 250:
+elif 2.8 <= d <= 3.5 and auw_g > 250:
     style = "Cinewhoop"
-elif cfg["prop_diameter"] >= 7.0 and auw_g >= 1500:
+elif d >= 7.0 and auw_g >= 1500:
     style = "Utility"
 
 st.write(f"**{style}**")
@@ -596,7 +589,7 @@ with st.expander("Build Profile I/O", expanded=False):
 
 
 # ---------------------------------------------------------
-# FPV Theory Section (Static)
+# FPV Theory Section
 # ---------------------------------------------------------
 
 with st.expander("FPV Theory, Math & Community Reference", expanded=False):
