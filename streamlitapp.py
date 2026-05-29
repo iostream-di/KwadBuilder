@@ -32,13 +32,13 @@ DEFAULT_5IN = {
     "lipo_cells": 6,
     "lipo_capacity": 1500,
     "lipo_c": 80,
-    "lipo_weight": 190,
+    "lipo_weight": 253,
     "lipo_health": 100,
 
     "frame_noise": 20,
     "frame_wheelbase": 225,
     "frame_prop_fit": 5.1,
-    "frame_weight": 120,
+    "frame_weight": 150,
 
     "fc_loop": 1000,
     "fc_cpu": 60,
@@ -53,10 +53,10 @@ DEFAULT_5IN = {
     "esc_weight": 14,
 
     "video_power": 800,
-    "video_weight": 10,
+    "video_weight": 30,
     "video_digital": True,
 
-    "rx_weight": 4,
+    "rx_weight": 10,
     "rx_elrs": True,
 
     "cam_weight": 0,
