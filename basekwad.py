@@ -450,29 +450,39 @@ class Kwad:
             0.20 * current_norm
         )
 
-    def overstressed_voltage_sag(self):
+    def overstressed_battery(self):
         if not self.lipo:
             return 0
 
-        # If max current exceeds battery safe current, sag risk is maxed
-        if self.max_current() > self.lipo.safe_current:
+        I_max = self.max_current()
+        safe = self.lipo.safe_current
+
+        # Hard overload: battery cannot supply demanded current
+        if I_max >= safe:
             return 1.0
 
-        sag = self.voltage_sag()  # raw fraction, e.g. 0.12 = 12%
+        # Stress curve:
+        # 0–60% of safe → low stress
+        # 60–100% → ramps sharply
+        ratio = I_max / safe
 
-        # New realistic severity curve:
-        # 0.00–0.05 → minimal
-        # 0.05–0.25 → linear ramp
-        # 0.25+     → max severity
-        return clamp01((sag - 0.05) / 0.20)
+        if ratio <= 0.6:
+            batt_stress = ratio / 0.6 * 0.4
+        else:
+            batt_stress = 0.4 + (ratio - 0.6) / 0.4 * 0.6
+
+        return clamp01(batt_stress)
+
 
     def overstressed_overall(self):
         return clamp01((
             self.overstressed_fc() +
             self.overstressed_esc() +
             self.overstressed_motor() +
-            self.overstressed_desync()
-        ) / 4.0)
+            self.overstressed_desync() +
+            self.overstressed_battery()
+        ) / 5.0)
+
 
     # -----------------------------------------------------
     # Build Style Classification
