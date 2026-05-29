@@ -327,12 +327,18 @@ st.subheader("Build parameters")
 
 b = st.session_state.build
 
+# Ensure prop size is valid; if not, fall back to nearest option
+if b["prop_size"] not in PROP_SIZE_OPTIONS:
+    # Find nearest allowed size
+    b["prop_size"] = min(PROP_SIZE_OPTIONS, key=lambda x: abs(x - b["prop_size"]))
+
 prop_size = st.selectbox(
     "Prop size (inches)",
     PROP_SIZE_OPTIONS,
     index=PROP_SIZE_OPTIONS.index(b["prop_size"]),
     key="prop_size",
 )
+
 prop_pitch = st.slider("Prop pitch (inches)", 0.8, 8.0, b["prop_pitch"], 0.1, key="prop_pitch")
 prop_blades = st.slider("Prop blades", 2, 8, b["prop_blades"], 1, key="prop_blades")
 motor_kv = st.slider("Motor KV", 300, 30000, b["motor_kv"], 50, key="motor_kv")
