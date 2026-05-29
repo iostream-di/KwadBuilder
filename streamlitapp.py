@@ -141,38 +141,39 @@ cfg = st.session_state.config
 
 def slider_with_buttons(label, minv, maxv, step, key):
     value_key = f"{key}_value"
-    slider_key = f"{key}_slider"
-    minus_key = f"{key}_minus"
-    plus_key = f"{key}_plus"
+    key_counter = f"{key}_counter"
 
-    # Initialize authoritative value
+    # Initialize
     if value_key not in st.session_state:
         st.session_state[value_key] = cfg[key]
+    if key_counter not in st.session_state:
+        st.session_state[key_counter] = 0
 
-    # Layout: [-] [slider] [+]
     col_minus, col_slider, col_plus = st.columns([1, 6, 1])
 
     # LEFT BUTTON
     with col_minus:
-        if st.button("−", key=minus_key):
+        if st.button("−", key=f"{key}_minus"):
             st.session_state[value_key] = max(minv, st.session_state[value_key] - step)
+            st.session_state[key_counter] += 1  # force slider to recreate
 
-    # SLIDER (reads AND writes the authoritative value)
+    # SLIDER (key changes when counter changes)
     with col_slider:
-        new_slider_val = st.slider(
+        slider_widget_key = f"{key}_slider_{st.session_state[key_counter]}"
+        st.session_state[value_key] = st.slider(
             label,
             min_value=minv,
             max_value=maxv,
             value=st.session_state[value_key],
             step=step,
-            key=slider_key
+            key=slider_widget_key
         )
-        st.session_state[value_key] = new_slider_val
 
     # RIGHT BUTTON
     with col_plus:
-        if st.button("+", key=plus_key):
+        if st.button("+", key=f"{key}_plus"):
             st.session_state[value_key] = min(maxv, st.session_state[value_key] + step)
+            st.session_state[key_counter] += 1  # force slider to recreate
 
     # Update cfg
     cfg[key] = st.session_state[value_key]
