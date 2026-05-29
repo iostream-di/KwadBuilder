@@ -24,8 +24,8 @@ DEFAULT_5IN = {
     "prop_weight": 3.5,
 
     "motor_kv": 1950,
-    "motor_stator_h": 7,
     "motor_stator_d": 23,
+    "motor_stator_h": 7,
     "motor_weight": 32,
 
     "lipo_cells": 6,
@@ -69,8 +69,8 @@ DEFAULT_WHOOP = {
     "prop_weight": 0.3,
 
     "motor_kv": 19000,
-    "motor_stator_h": 2,
     "motor_stator_d": 8,
+    "motor_stator_h": 2,
     "motor_weight": 3,
 
     "lipo_cells": 1,
@@ -146,7 +146,6 @@ def slider_with_buttons(label, minv, maxv, step, key):
     value_key = f"{key}_value"
     key_counter = f"{key}_counter"
 
-    # Initialize
     if value_key not in st.session_state:
         st.session_state[value_key] = cfg[key]
     if key_counter not in st.session_state:
@@ -154,13 +153,11 @@ def slider_with_buttons(label, minv, maxv, step, key):
 
     col_minus, col_slider, col_plus = st.columns([1, 6, 1])
 
-    # LEFT BUTTON
     with col_minus:
         if st.button("−", key=f"{key}_minus"):
             st.session_state[value_key] = max(minv, st.session_state[value_key] - step)
-            st.session_state[key_counter] += 1  # force slider to recreate
+            st.session_state[key_counter] += 1
 
-    # SLIDER (key changes when counter changes)
     with col_slider:
         slider_widget_key = f"{key}_slider_{st.session_state[key_counter]}"
         st.session_state[value_key] = st.slider(
@@ -172,13 +169,11 @@ def slider_with_buttons(label, minv, maxv, step, key):
             key=slider_widget_key
         )
 
-    # RIGHT BUTTON
     with col_plus:
         if st.button("+", key=f"{key}_plus"):
             st.session_state[value_key] = min(maxv, st.session_state[value_key] + step)
-            st.session_state[key_counter] += 1  # force slider to recreate
+            st.session_state[key_counter] += 1
 
-    # Update cfg
     cfg[key] = st.session_state[value_key]
 
 
@@ -194,8 +189,8 @@ with st.expander("Propeller", expanded=False):
 
 with st.expander("Motors", expanded=False):
     slider_with_buttons("Motor KV", 500, 30000, 50, "motor_kv")
-    slider_with_buttons("Stator height (mm)", 2, 15, 1, "motor_stator_h")
     slider_with_buttons("Stator diameter (mm)", 5, 35, 1, "motor_stator_d")
+    slider_with_buttons("Stator height (mm)", 2, 15, 1, "motor_stator_h")
     slider_with_buttons("Motor weight (g)", 2, 60, 1, "motor_weight")
     cfg["motor_count"] = st.selectbox("Motor count", [4, 6, 8, 12],
                                       index=[4, 6, 8, 12].index(cfg["motor_count"]))
@@ -308,8 +303,8 @@ with col1:
     st.metric("Max Current", f"{quad.max_current():.1f} A")
 
 with col2:
-    st.metric("Cruise Current", f"{quad.cruise_current():.1f} A")
-    st.metric("Battery Safe Current", f"{quad.batt_safe_current():.1f} A")
+    st.metric("Cruise Current", f"{quad.flight_profile_currents()['Cruise']:.1f} A")
+    st.metric("Battery Safe Current", f"{quad.lipo.safe_current:.1f} A")
     st.metric("Flight Time (Cruise)", f"{quad.flight_time():.1f} min")
     st.metric("Voltage Sag", f"{quad.voltage_sag() * 100:.1f} %")
 
@@ -452,54 +447,4 @@ with st.expander("FPV Theory, Math & Community Reference", expanded=False):
     - Demag compensation prevents desync under high load.
     - Timing affects torque and efficiency:
         - Low timing = efficient, cooler
-        - High timing = more torque, more heat
-    """)
-
-    st.markdown("## Flight Controller Physics")
-
-    st.latex(r"Loop\ Frequency = \frac{1}{Loop\ Time}")
-    st.write("""
-    - Higher loop frequency improves responsiveness.
-    - Higher CPU load increases FC heat.
-    - Frame noise affects filtering load.
-    - DShot rate affects motor update speed.
-    """)
-
-    st.markdown("## Build Style Definitions")
-
-    st.write("""
-    - **Whoop:** 1.6–2.0" props, <80g AUW  
-    - **Toothpick:** 2.5–3" props, <120g AUW, TWR > 4  
-    - **Freestyle:** 3–5" props, 200–800g AUW, TWR 4–8  
-    - **Racing:** 5" props, 400–600g AUW, TWR 8–12  
-    - **Long Range:** 6–7" props, TWR 2–4, flight time > 10 min  
-    - **Cinewhoop:** 3–3.5" props, ducts, stable flight  
-    - **Kamikaze:** 7–10" props, 1–2kg AUW, 6–10 min  
-    - **Utility:** 7–17" props, 1.5–4kg AUW, payload‑focused  
-    """)
-
-    st.markdown("## Community Reference Tables")
-
-    st.write("### Typical AUW Ranges")
-    st.table({
-        "Build": ["Whoop", "Toothpick", "3\"", "5\" Freestyle", "5\" Racing", "7\" LR", "Utility"],
-        "AUW (g)": ["20–45", "55–120", "120–200", "650–800", "430–550", "650–1100", "1500–4000+"]
-    })
-
-    st.write("### Typical TWR Ranges")
-    st.table({
-        "Build": ["Whoop", "Toothpick", "Freestyle", "Racing", "Long Range", "Utility"],
-        "TWR": ["2–3", "4–7", "5–8", "8–12", "2–3", "1.5–3"]
-    })
-
-    st.write("### Typical RPM Ranges")
-    st.table({
-        "Build": ["Whoop", "Toothpick", "3\"", "5\"", "7\""],
-        "Loaded RPM": ["28–45k", "32–48k", "38–48k", "28–36k", "18–26k"]
-    })
-
-    st.write("### Typical Flight Times")
-    st.table({
-        "Build": ["Whoop", "Toothpick", "Freestyle", "Racing", "Long Range"],
-        "Flight Time": ["3–5 min", "3–6 min", "4–7 min", "1.5–3 min", "12–25 min"]
-    })
+        - High

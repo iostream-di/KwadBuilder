@@ -68,10 +68,6 @@ class Motor:
         self.weight = weight
         self.prop = prop
 
-        # Computed values
-        self.max_thrust = None
-        self.max_current = None
-
     # -----------------------------------------------------
     # Thrust model (calibrated)
     # -----------------------------------------------------
@@ -110,7 +106,6 @@ class LiPo:
         self.c_rating = c_rating
         self.weight = weight
         self.hv = hv
-        # 0.0–1.0, where 1.0 is brand new, 0.2 is very tired
         self.health = clamp01(health)
 
     @property
@@ -119,18 +114,15 @@ class LiPo:
 
     @property
     def safe_current(self):
-        # Health reduces safe continuous current
         return (self.capacity / 1000.0) * self.c_rating * self.health
 
     @property
     def internal_resistance(self):
-        # Base IR scaled by health: lower health → higher IR
         base = pack_internal_resistance_ohm(self.cells, self.capacity)
         ir_multiplier = 1.0 + (1.0 - self.health) * 1.5
         return base * ir_multiplier
 
     def usable_mah(self):
-        # Only a fraction of capacity is realistically usable, scaled by health
         return self.capacity * 0.8 * self.health
 
 
@@ -240,28 +232,12 @@ class Kwad:
     def max_thrust(self):
         if not self.motors or not self.lipo:
             return 0
-        thrusts = []
-        for m in self.motors:
-            t = m.compute_thrust(self.lipo.nominal_voltage)
-            thrusts.append(t)
-        return sum(thrusts)
+        return sum(m.compute_thrust(self.lipo.nominal_voltage) for m in self.motors)
 
     def max_current(self):
         if not self.motors or not self.lipo:
             return 0
-        currents = []
-        for m in self.motors:
-            t = m.compute_thrust(self.lipo.nominal_voltage)
-            currents.append(m.compute_current(t))
-        return sum(currents)
-
-    def cruise_current(self):
-        twr = self.max_twr()
-        cruise_factor = 0.35 + 0.25 * clamp01(twr / 6.0)
-        return self.max_current() * cruise_factor
-
-    def batt_safe_current(self):
-        return self.lipo.safe_current if self.lipo else 0
+        return sum(m.compute_current(m.compute_thrust(self.lipo.nominal_voltage)) for m in self.motors)
 
     # -----------------------------------------------------
     # TWR
@@ -275,44 +251,30 @@ class Kwad:
     # Hover / Flight profiles
     # -----------------------------------------------------
     def hover_throttle(self):
-        # Fraction of max thrust required to hover
-        if self.auw() <= 0 or self.max_thrust() <= 0:
-            return 0.0
+        if self.max_thrust() <= 0:
+            return 1.0
         return clamp01(self.auw() / self.max_thrust())
 
     def hover_current(self):
         return self.max_current() * self.hover_throttle()
 
     def flight_profile_currents(self):
-        """
-        Returns a dict of mode -> current draw (A),
-        with TWR‑dependent scaling.
-        """
         I_max = self.max_current()
-        I_hover = self.hover_current()
-        twr = self.max_twr()
+        hover = self.hover_throttle()
 
-        if I_max <= 0 or I_hover <= 0 or twr <= 0:
-            return {
-                "Loitering": 0.0,
-                "Cruise": 0.0,
-                "Freestyle": 0.0,
-                "Racing": 0.0,
-                "Full Throttle": 0.0,
-            }
-
-        loiter = I_hover * 1.05
-        cruise = I_hover * (1.4 + 0.1 * twr)
-        freestyle = I_hover * (2.5 + 0.2 * twr)
-        racing = I_hover * (3.5 + 0.3 * twr)
-        full = I_max
+        # If hover throttle is 1.0, quad is overloaded → all modes collapse
+        loiter     = I_max * min(1.0, hover * 1.05)
+        cruise     = I_max * min(1.0, hover * 1.6)
+        freestyle  = I_max * min(1.0, hover * 2.2)
+        racing     = I_max * min(1.0, hover * 3.0)
+        full       = I_max
 
         return {
-            "Loitering": max(loiter, 0.0),
-            "Cruise": max(cruise, 0.0),
-            "Freestyle": max(freestyle, 0.0),
-            "Racing": max(racing, 0.0),
-            "Full Throttle": max(full, 0.0),
+            "Loitering": loiter,
+            "Cruise": cruise,
+            "Freestyle": freestyle,
+            "Racing": racing,
+            "Full Throttle": full,
         }
 
     # -----------------------------------------------------
@@ -329,7 +291,6 @@ class Kwad:
         return (usable_mah / 1000.0) / amps * 60.0
 
     def flight_time(self):
-        # Use "Cruise" as the representative flight time
         return self.flight_time_profile("Cruise")
 
     # -----------------------------------------------------
@@ -358,7 +319,7 @@ class Kwad:
         if not self.esc or not self.lipo:
             return 0
         current = self.max_current()
-        safe = self.batt_safe_current() / len(self.motors)
+        safe = self.lipo.safe_current / len(self.motors)
         current_heat = clamp01(current / safe) if safe > 0 else 1.0
 
         pwm_norm = (self.esc.motor_pwm - 24000) / (192000 - 24000)
