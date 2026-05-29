@@ -457,21 +457,24 @@ class Kwad:
         I_max = self.max_current()
         safe = self.lipo.safe_current
 
-        # Hard overload: battery cannot supply demanded current
-        if I_max >= safe:
+        # Burst capability (FPV realistic)
+        burst_safe = safe * 2.0   # 200% of continuous safe current
+
+        # Hard overload: even burst limit exceeded
+        if I_max >= burst_safe:
             return 1.0
 
-        # Stress curve:
-        # 0–60% of safe → low stress
-        # 60–100% → ramps sharply
-        ratio = I_max / safe
+        ratio = I_max / burst_safe
 
+        # 0–60% of burst → low stress
+        # 60–100% → ramps sharply
         if ratio <= 0.6:
             batt_stress = ratio / 0.6 * 0.4
         else:
             batt_stress = 0.4 + (ratio - 0.6) / 0.4 * 0.6
 
         return clamp01(batt_stress)
+
 
 
     def overstressed_overall(self):
