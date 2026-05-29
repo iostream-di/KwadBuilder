@@ -454,17 +454,18 @@ class Kwad:
         if not self.lipo:
             return 0
 
-        I_max = self.max_current()
+        profiles = self.flight_profile_currents()
+        I_race = profiles["Racing"]  # sustained high-load current
         safe = self.lipo.safe_current
 
-        # Burst capability (FPV realistic)
-        burst_safe = safe * 2.0   # 200% of continuous safe current
+        # FPV realistic burst margin
+        burst_safe = safe * 1.6   # 160% of continuous safe current
 
         # Hard overload: even burst limit exceeded
-        if I_max >= burst_safe:
+        if I_race >= burst_safe:
             return 1.0
 
-        ratio = I_max / burst_safe
+        ratio = I_race / burst_safe
 
         # 0–60% of burst → low stress
         # 60–100% → ramps sharply
@@ -474,6 +475,7 @@ class Kwad:
             batt_stress = 0.4 + (ratio - 0.6) / 0.4 * 0.6
 
         return clamp01(batt_stress)
+
 
 
 
