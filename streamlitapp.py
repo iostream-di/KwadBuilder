@@ -142,16 +142,12 @@ cfg = st.session_state.config
 def slider_with_input(label, minv, maxv, step, key):
     slider_key = f"{key}_slider"
     input_key = f"{key}_input"
-    base_key = f"{key}_value"
 
-    # Initialize the shared value
-    if base_key not in st.session_state:
-        st.session_state[base_key] = cfg[key]
+    # Initialize text value if missing
+    if key not in st.session_state:
+        st.session_state[key] = cfg[key]
 
-    # Read current shared value
-    current = st.session_state[base_key]
-
-    # Render widgets using the shared value
+    # Render widgets
     col1, col2 = st.columns([3, 1])
 
     with col1:
@@ -159,7 +155,7 @@ def slider_with_input(label, minv, maxv, step, key):
             label,
             min_value=minv,
             max_value=maxv,
-            value=current,
+            value=st.session_state[key],
             step=step,
             key=slider_key
         )
@@ -169,27 +165,18 @@ def slider_with_input(label, minv, maxv, step, key):
             " ",
             min_value=minv,
             max_value=maxv,
-            value=current,
+            value=st.session_state[key],
             step=step,
             key=input_key
         )
 
-    # Detect which widget changed
-    if sval != current:
-        new_val = sval
-    elif ival != current:
-        new_val = ival
-    else:
-        new_val = current
+    # Slider ALWAYS overrides text box
+    if sval != st.session_state[key]:
+        st.session_state[key] = sval
+        st.session_state[input_key] = sval
 
-    # Clamp
-    new_val = max(minv, min(maxv, new_val))
-
-    # Update shared value BEFORE next rerun
-    st.session_state[base_key] = new_val
-
-    # Update cfg
-    cfg[key] = new_val
+    # Text box is the final source of truth
+    cfg[key] = st.session_state[key]
 
 # ---------------------------------------------------------
 # UI Sections
