@@ -18,7 +18,7 @@ def nominal_voltage(s_cells: int) -> float:
 
 def pack_internal_resistance_ohm(s_cells: int, capacity_mah: int) -> float:
     capacity_ah = capacity_mah / 1000.0
-    base_per_cell = 0.010  # 10 mΩ per cell baseline
+    base_per_cell = 0.010
     scale = 1.0 / max(capacity_ah, 0.5)
     return s_cells * base_per_cell * scale
 
@@ -52,7 +52,7 @@ def estimate_thrust_per_motor_g(diameter_in, pitch_in, blades, rpm, stator_d, st
     blade_factor = 1 + (blades - 3) * 0.12
     rpm_factor = (rpm / 40000) ** 0.9
 
-    base = 900  # tuned for 5" reference
+    base = 900
     thrust = base * area / prop_disk_area(5.0)
     thrust *= (pitch_in / 4.5) ** 0.4
     thrust *= blade_factor
@@ -117,28 +117,20 @@ def build_style_label(twr, flight_time, prop_size, auw, max_payload_g):
     else:
         adjective = "Extreme"
 
-    # Toothpick
     if prop_size <= 3.0 and auw < 120 and twr > 4:
         style = "Toothpick"
-    # Whoop
     elif prop_size <= 2.5 and auw < 80:
         style = "Whoop"
-    # Kamikaze: 7–10", 1–2 kg AUW, 1–2 kg payload, 6–10 min
     elif 7.0 <= prop_size <= 10.0 and 1000 <= auw <= 2000 and 1000 <= max_payload_g <= 2000 and 6 <= flight_time <= 10:
         style = "Kamikaze"
-    # Utility: 7–17", heavy AUW, heavy payload, long flight time
     elif 7.0 <= prop_size <= 17.0 and auw >= 1200 and max_payload_g >= 1500 and flight_time >= 12:
         style = "Utility"
-    # Freestyle
     elif 3.0 <= prop_size <= 5.1 and 200 <= auw <= 800 and 4 <= twr <= 8:
         style = "Freestyle"
-    # Racing
     elif abs(prop_size - 5.0) < 0.2 and 400 <= auw <= 600 and twr >= 8:
         style = "Racing"
-    # Cinelog
     elif 3.0 <= prop_size <= 4.5 and 180 <= auw <= 350 and flight_time > 8 and twr < 4:
         style = "Cinelog"
-    # Long Range
     elif prop_size >= 6.0 and 2 <= twr <= 4 and flight_time > 10:
         style = "Long Range"
     else:
@@ -147,35 +139,24 @@ def build_style_label(twr, flight_time, prop_size, auw, max_payload_g):
     return f"{adjective} {style}"
 
 
-def heat_color(heat_0_1: float) -> str:
-    if heat_0_1 <= 0.5:
-        t = heat_0_1 / 0.5
-        c1 = (0x7F, 0xDB, 0xFF)
-        c2 = (0xFF, 0xD7, 0x00)
-    else:
-        t = (heat_0_1 - 0.5) / 0.5
-        c1 = (0xFF, 0xD7, 0x00)
-        c2 = (0xFF, 0x41, 0x36)
-
-    r = int(c1[0] + (c2[0] - c1[0]) * t)
-    g = int(c1[1] + (c2[1] - c1[1]) * t)
-    b = int(c1[2] + (c2[2] - c1[2]) * t)
-    return f"#{r:02X}{g:02X}{b:02X}"
-
-
-def colored_percentage(label, value):
-    pct = int(value * 100)
-    if pct < 40:
-        color = "#2E86DE"
-    elif pct < 70:
-        color = "#F1C40F"
-    else:
-        color = "#E74C3C"
-    st.markdown(
-        f"**{label}:** "
-        f"<span style='color:{color}; font-weight:bold;'>{pct}%</span>",
-        unsafe_allow_html=True,
-    )
+def render_heat_bar(label: str, value_0_1: float):
+    value_0_1 = clamp01(value_0_1)
+    percent = int(value_0_1 * 100)
+    indicator_pos = percent
+    bar_html = f"""
+    <div style="margin-bottom:6px;">
+      <div style="font-weight:600; margin-bottom:2px;">{label}</div>
+      <div style="width: 100%; height: 22px; border-radius: 11px;
+           background: linear-gradient(90deg, #7FDBFF 0%, #FFD700 50%, #FF4136 100%);
+           position: relative;">
+        <div style="position: absolute; top: -4px; left: calc({indicator_pos}% - 5px);
+                    width: 10px; height: 30px; background: black; border-radius: 3px;">
+        </div>
+      </div>
+      <div style="margin-top:2px; font-size:0.85rem;">{percent}%</div>
+    </div>
+    """
+    st.markdown(bar_html, unsafe_allow_html=True)
 
 
 # -----------------------------
@@ -200,6 +181,11 @@ DEFAULT_BUILD = {
     "lipo_c": 80,
     "auw": 700,
     "motor_count": 4,
+    "fc_loop_hz": 1000,
+    "frame_noise": 20,
+    "esc_pwm": 48000,
+    "esc_demag": "Medium",
+    "esc_timing": "Medium",
 }
 
 if "build" not in st.session_state:
@@ -214,7 +200,6 @@ st.subheader("Build parameters")
 
 b = st.session_state.build
 
-# Ensure prop size is valid; if not, snap to nearest option
 if b["prop_size"] not in PROP_SIZE_OPTIONS:
     b["prop_size"] = min(PROP_SIZE_OPTIONS, key=lambda x: abs(x - b["prop_size"]))
 
@@ -240,6 +225,45 @@ motor_count = st.selectbox(
     key="motor_count",
 )
 
+st.subheader("Control & ESC parameters")
+
+fc_loop_options = [100, 200, 250, 333, 400, 500, 666, 800, 1000, 2000, 4000, 8000]
+fc_loop_hz = st.selectbox(
+    "FC PID loop frequency (Hz)",
+    fc_loop_options,
+    index=fc_loop_options.index(b.get("fc_loop_hz", 1000)),
+    key="fc_loop_hz",
+)
+
+frame_noise = st.slider(
+    "Theoretical frame & motor noise level",
+    0, 100, b.get("frame_noise", 20), 1, key="frame_noise"
+)
+
+esc_pwm_options = [24000, 32000, 48000, 96000, 128000, 192000]
+esc_pwm = st.selectbox(
+    "ESC PWM frequency (Hz)",
+    esc_pwm_options,
+    index=esc_pwm_options.index(b.get("esc_pwm", 48000)),
+    key="esc_pwm",
+)
+
+esc_demag_options = ["Off", "Low", "Medium", "High"]
+esc_demag = st.selectbox(
+    "ESC demag compensation",
+    esc_demag_options,
+    index=esc_demag_options.index(b.get("esc_demag", "Medium")),
+    key="esc_demag",
+)
+
+esc_timing_options = ["Low", "Medium", "High", "Very High"]
+esc_timing = st.selectbox(
+    "ESC timing",
+    esc_timing_options,
+    index=esc_timing_options.index(b.get("esc_timing", "Medium")),
+    key="esc_timing",
+)
+
 st.session_state.build.update(
     dict(
         prop_size=prop_size,
@@ -253,6 +277,11 @@ st.session_state.build.update(
         lipo_c=lipo_c,
         auw=auw,
         motor_count=motor_count,
+        fc_loop_hz=fc_loop_hz,
+        frame_noise=frame_noise,
+        esc_pwm=esc_pwm,
+        esc_demag=esc_demag,
+        esc_timing=esc_timing,
     )
 )
 
@@ -263,7 +292,6 @@ st.session_state.build.update(
 
 V_nom = nominal_voltage(lipo_s)
 
-# First pass: assume no sag to estimate current
 rpm_nl_nom = rpm_no_load(motor_kv, V_nom)
 rpm_ld_nom = rpm_loaded(rpm_nl_nom)
 thrust_per_motor_nom = estimate_thrust_per_motor_g(
@@ -272,11 +300,9 @@ thrust_per_motor_nom = estimate_thrust_per_motor_g(
 current_per_motor_nom = estimate_current_per_motor_a(thrust_per_motor_nom)
 total_current_nom = current_per_motor_nom * motor_count
 
-# Voltage sag
 r_pack = pack_internal_resistance_ohm(lipo_s, lipo_capacity)
 V_loaded = loaded_voltage(V_nom, total_current_nom, r_pack)
 
-# Recompute with sagged voltage
 rpm_nl = rpm_no_load(motor_kv, V_loaded)
 rpm_ld = rpm_loaded(rpm_nl)
 thrust_per_motor_g = estimate_thrust_per_motor_g(
@@ -285,11 +311,10 @@ thrust_per_motor_g = estimate_thrust_per_motor_g(
 total_thrust_g = thrust_per_motor_g * motor_count
 twr = total_thrust_g / auw if auw > 0 else 0.0
 
-# Max payload where TWR ≈ 2
 max_payload_g = max(total_thrust_g / 2.0 - auw, 0.0)
 
 max_speed_mps = pitch_speed_mps(prop_pitch, rpm_ld)
-max_speed_kph = max_speed_mps * 3.6
+max_speed_mph = max_speed_mps * 2.23694
 
 current_per_motor_a = estimate_current_per_motor_a(thrust_per_motor_g)
 total_current_a = current_per_motor_a * motor_count
@@ -299,38 +324,66 @@ flight_time_min = estimate_flight_time_min(lipo_capacity, cruise_current_a)
 
 battery_safe_a = (lipo_capacity / 1000.0) * lipo_c
 
-# Advanced: Kt, inertia, desync
 kt = motor_kt_nm_per_a(motor_kv)
 prop_inertia_rel = prop_inertia_relative(prop_size, prop_pitch, prop_blades)
-desync_potential = clamp01(
-    0.2
-    + 0.4 * (motor_kv / 30000)
-    + 0.2 * (prop_pitch / 8.0)
-    + 0.2 * (prop_inertia_rel / prop_inertia_relative(5.0, 4.5, 3))
+
+sag_ratio = clamp01((V_nom - V_loaded) / max(V_nom, 1e-6))
+sag_severity = clamp01(sag_ratio / 0.3)
+
+# FC overheat: loop freq, noise, sag, KV
+loop_norm = math.log10(fc_loop_hz) / math.log10(8000)
+noise_norm = frame_noise / 100.0
+kv_norm = motor_kv / 30000.0
+fc_heat = clamp01(
+    0.2 * loop_norm +
+    0.3 * noise_norm +
+    0.2 * sag_severity +
+    0.3 * kv_norm
 )
 
-# FC, ESC, motor heat
-fc_heat = clamp01(0.1 + 0.2 * (lipo_s - 1) / 7 + 0.2 * (motor_kv / 30000))
-
-esc_safe_a = battery_safe_a / motor_count
+# ESC overheat: current, PWM, timing, demag
+esc_safe_a = battery_safe_a / motor_count if motor_count > 0 else 0.0
 esc_heat_current = heat_from_current(current_per_motor_a, esc_safe_a)
-esc_heat_thermal = esc_thermal_response(current_per_motor_a, esc_safe_a)
-esc_heat = clamp01(0.5 * esc_heat_current + 0.5 * esc_heat_thermal)
 
-motor_heat = heat_from_current(current_per_motor_a, 25.0)
+pwm_norm = (esc_pwm - 24000) / (192000 - 24000)
+timing_map = {"Low": 0.2, "Medium": 0.4, "High": 0.7, "Very High": 1.0}
+demag_map = {"Off": 1.0, "Low": 0.7, "Medium": 0.4, "High": 0.2}
+timing_norm = timing_map.get(esc_timing, 0.4)
+demag_norm = demag_map.get(esc_demag, 0.4)
+
+esc_heat_extra = clamp01(
+    0.3 * pwm_norm +
+    0.4 * timing_norm +
+    0.3 * demag_norm
+)
+
+esc_heat = clamp01(0.6 * esc_heat_current + 0.4 * esc_heat_extra)
+
+# Motor overheat: current, inertia, rpm, cooling
+motor_safe_current = 20.0 * (stator_d * stator_h) / (23 * 6)
+motor_current_heat = heat_from_current(current_per_motor_a, motor_safe_current)
+
+rpm_norm = clamp01(rpm_ld / 50000.0)
+cooling_factor = clamp01(prop_size / 7.0)
+inertia_norm = clamp01(prop_inertia_rel / prop_inertia_relative(5.0, 4.5, 3))
+
+motor_heat = clamp01(
+    0.5 * motor_current_heat +
+    0.2 * inertia_norm +
+    0.2 * rpm_norm -
+    0.1 * cooling_factor
+)
+
+# Desync risk: high KV, high inertia, high timing, low demag, high rpm
+desync_base = clamp01(
+    0.3 * kv_norm +
+    0.3 * inertia_norm +
+    0.2 * timing_norm +
+    0.2 * rpm_norm
+)
+desync_potential = clamp01(desync_base * (1.0 + 0.3 * (1.0 - demag_norm)))
 
 overall_heat = clamp01((fc_heat + esc_heat + motor_heat + desync_potential) / 4.0)
-
-
-def twr_at_throttle(throttle: float) -> float:
-    thrust = total_thrust_g * (throttle ** 1.1)
-    return thrust / auw if auw > 0 else 0.0
-
-
-twr_curve = {
-    "Throttle %": [25, 50, 75, 100],
-    "TWR": [twr_at_throttle(x / 100.0) for x in [25, 50, 75, 100]],
-}
 
 
 # -----------------------------
@@ -342,7 +395,7 @@ st.subheader("Theoretical metrics")
 colA, colB = st.columns(2)
 
 with colA:
-    st.metric("Max speed", f"{max_speed_kph:0.1f} km/h")
+    st.metric("Max speed", f"{max_speed_mph:0.1f} mph")
     st.metric("Total max thrust", f"{total_thrust_g:0.0f} g")
     st.metric("Thrust-to-weight ratio", f"{twr:0.2f} : 1")
     st.metric("Max payload (TWR≈2)", f"{max_payload_g:0.0f} g")
@@ -355,72 +408,43 @@ with colB:
 
 st.subheader("Thermal & reliability potentials")
 
-colH1, colH2, colH3, colH4 = st.columns(4)
-
-with colH1:
-    colored_percentage("FC overheat", fc_heat)
-
-with colH2:
-    colored_percentage("ESC overheat", esc_heat)
-
-with colH3:
-    colored_percentage("Motor overheat", motor_heat)
-
-with colH4:
-    colored_percentage("Desync risk", desync_potential)
+render_heat_bar("FC overheat", fc_heat)
+render_heat_bar("ESC overheat", esc_heat)
+render_heat_bar("Motor overheat", motor_heat)
+render_heat_bar("Desync risk", desync_potential)
+render_heat_bar("Voltage sag severity", sag_severity)
+render_heat_bar("Overall HEAT rating", overall_heat)
 
 
 # -----------------------------
-# Build style & HEAT bar
+# Build style
 # -----------------------------
 
 style_label = build_style_label(twr, flight_time_min, prop_size, auw, max_payload_g)
 st.subheader("Build style")
 st.write(f"**Theoretical feel:** `{style_label}`")
 
-st.write("**Overall HEAT rating**")
-
-heat_percent = int(overall_heat * 100)
-indicator_pos = heat_percent
-
-heat_bar_html = f"""
-<div style="width: 100%; height: 28px; border-radius: 14px;
-     background: linear-gradient(90deg, #7FDBFF 0%, #FFD700 50%, #FF4136 100%);
-     position: relative;">
-  <div style="position: absolute; top: -6px; left: calc({indicator_pos}% - 6px);
-              width: 12px; height: 40px; background: black; border-radius: 3px;">
-  </div>
-</div>
-<p style="margin-top: 4px; font-size: 0.9rem;">Heat: <b>{heat_percent}%</b></p>
-"""
-
-st.markdown(heat_bar_html, unsafe_allow_html=True)
-
 
 # -----------------------------
-# Dynamic TWR curve
+# Export / Import build profile
 # -----------------------------
 
-with st.expander("Dynamic TWR vs throttle"):
-    st.line_chart(twr_curve, x="Throttle %", y="TWR")
-    st.caption("TWR is estimated at different throttle levels using a simple non-linear scaling.")
-
-
-# -----------------------------
-# Export build profile
-# -----------------------------
-
-st.subheader("Export build profile")
+st.subheader("Build profile I/O")
 
 export_data = {
     "build": st.session_state.build,
     "metrics": {
-        "max_speed_kph": max_speed_kph,
+        "max_speed_mph": max_speed_mph,
         "total_thrust_g": total_thrust_g,
         "twr": twr,
         "max_payload_g": max_payload_g,
         "flight_time_min": flight_time_min,
         "overall_heat": overall_heat,
+        "fc_heat": fc_heat,
+        "esc_heat": esc_heat,
+        "motor_heat": motor_heat,
+        "desync_potential": desync_potential,
+        "sag_severity": sag_severity,
         "style_label": style_label,
     },
 }
@@ -432,6 +456,21 @@ st.download_button(
     file_name="fpv_build_profile.json",
     mime="application/json",
 )
+
+uploaded = st.file_uploader("Import build profile (JSON)", type=["json"])
+if uploaded is not None:
+    try:
+        imported = json.load(uploaded)
+        if "build" in imported and isinstance(imported["build"], dict):
+            for k, v in imported["build"].items():
+                if k in st.session_state.build:
+                    st.session_state.build[k] = v
+            st.success("Build profile imported. Rerunning with new parameters.")
+            st.experimental_rerun()
+        else:
+            st.error("Invalid JSON format: missing 'build' object.")
+    except Exception as e:
+        st.error(f"Failed to parse JSON: {e}")
 
 
 # -----------------------------
