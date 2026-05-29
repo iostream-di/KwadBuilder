@@ -395,29 +395,47 @@ class Kwad:
     def overstressed_desync(self):
         if not self.motors or not self.esc or not self.lipo:
             return 0
+
         m = self.motors[0]
 
-        kv_norm = m.kv / 30000.0
-        inertia = prop_disk_area(m.prop.diameter) * m.prop.pitch * m.prop.blades
-        inertia_norm = clamp01(inertia / (prop_disk_area(5.0) * 4.5 * 3))
+        # Compute thrust & current
+        thrust = m.compute_thrust(self.lipo.nominal_voltage)
+        current = m.compute_current(thrust)
 
-        timing_map = {"low": 0.2, "med-low": 0.35, "med": 0.5, "med-high": 0.7, "high": 1.0}
-        timing_norm = timing_map.get(self.esc.timing, 0.5)
-
+        # RPM
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
-        rpm_norm = clamp01(rpm / 50000.0)
 
-        demag_map = {"disabled": 1.0, "low": 0.7, "high": 0.3}
-        demag_norm = demag_map.get(self.esc.demag_comp, 0.5)
+        # --- 1. Torque load factor (heavy props, many blades, high pitch) ---
+        # Use thrust per RPM as a proxy for torque load
+        torque_load = thrust / max(rpm, 1)
+        torque_norm = clamp01(torque_load / 0.06)  # tuned for 5" props
 
-        base = clamp01(
-            0.3 * kv_norm +
-            0.3 * inertia_norm +
-            0.2 * timing_norm +
-            0.2 * rpm_norm
+        # --- 2. Low RPM + high load = desync danger ---
+        low_rpm_factor = clamp01((20000 - rpm) / 20000)  # 20k RPM threshold
+        low_rpm_load = clamp01(low_rpm_factor * torque_norm)
+
+        # --- 3. ESC timing & demag ---
+        timing_map = {"low": 0.1, "med-low": 0.3, "med": 0.5, "med-high": 0.7, "high": 1.0}
+        timing_risk = timing_map.get(self.esc.timing, 0.5)
+
+        demag_map = {"high": 0.1, "low": 0.7, "disabled": 1.0}
+        demag_risk = demag_map.get(self.esc.demag_comp, 0.5)
+
+        # --- 4. PWM frequency ---
+        pwm_norm = clamp01((48000 - self.esc.motor_pwm) / 48000)  # lower PWM = more risk
+
+        # --- 5. Current spikes ---
+        current_norm = clamp01(current / (m.current_rating * 1.5))
+
+        # Final weighted risk
+        return clamp01(
+            0.35 * torque_norm +
+            0.25 * low_rpm_load +
+            0.15 * timing_risk +
+            0.15 * demag_risk +
+            0.10 * pwm_norm +
+            0.20 * current_norm
         )
-
-        return clamp01(base * (1.0 + 0.4 * (1.0 - demag_norm)))
 
     def overstressed_voltage_sag(self):
         sag = self.voltage_sag()  # raw fraction, e.g. 0.12 = 12%

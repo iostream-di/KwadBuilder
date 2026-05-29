@@ -24,7 +24,7 @@ DEFAULT_5IN = {
     "prop_weight": 3.5,
 
     "motor_kv": 1950,
-    "motor_stator_d": 23,
+    "motor_stator_d": 22,
     "motor_stator_h": 7,
     "motor_current_rating": 40,
     "motor_weight": 32,
