@@ -27,6 +27,7 @@ DEFAULT_5IN = {
     "motor_stator_d": 23,
     "motor_stator_h": 7,
     "motor_weight": 32,
+    "motor_current_rating": 40,
 
     "lipo_cells": 6,
     "lipo_capacity": 1500,
@@ -74,6 +75,7 @@ DEFAULT_WHOOP = {
     "motor_stator_d": 8,
     "motor_stator_h": 2,
     "motor_weight": 3,
+    "motor_current_rating": 5,
 
     "lipo_cells": 1,
     "lipo_capacity": 300,
@@ -196,6 +198,7 @@ with st.expander("Motors", expanded=False):
     slider_with_buttons("Stator diameter (mm)", 5, 35, 1, "motor_stator_d")
     slider_with_buttons("Stator height (mm)", 2, 15, 1, "motor_stator_h")
     slider_with_buttons("Motor weight (g)", 2, 60, 1, "motor_weight")
+    slider_with_buttons("Motor Current Rating (A)", 5, 80, 1, "motor_current_rating")
     cfg["motor_count"] = st.selectbox("Motor count", [4, 6, 8, 12],
                                       index=[4, 6, 8, 12].index(cfg["motor_count"]))
 
@@ -263,8 +266,18 @@ with st.expander("Payload", expanded=False):
 # ---------------------------------------------------------
 
 prop = Propeller(cfg["prop_diameter"], cfg["prop_pitch"], cfg["prop_blades"], cfg["prop_weight"])
-motors = [Motor(cfg["motor_stator_h"], cfg["motor_stator_d"], cfg["motor_kv"], cfg["motor_weight"], prop)
-          for _ in range(cfg["motor_count"])]
+motors = [
+    Motor(
+        cfg["motor_stator_h"],
+        cfg["motor_stator_d"],
+        cfg["motor_kv"],
+        cfg["motor_weight"],
+        prop,
+        current_rating=cfg["motor_current_rating"]
+    )
+    for _ in range(cfg["motor_count"])
+]
+
 
 lipo = LiPo(
     cfg["lipo_cells"],

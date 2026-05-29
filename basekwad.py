@@ -62,12 +62,13 @@ class Propeller:
 
 
 class Motor:
-    def __init__(self, stator_height, stator_diameter, kv, weight, prop: Propeller):
+    def __init__(self, stator_height, stator_diameter, kv, weight, prop: Propeller, current_rating=40):
         self.stator_height = stator_height
         self.stator_width = stator_diameter
         self.kv = kv
         self.weight = weight
         self.prop = prop
+        self.current_rating = current_rating # continuous-ish rating in amps
 
     # -----------------------------------------------------
     # Thrust model (calibrated)
@@ -361,28 +362,25 @@ class Kwad:
         thrust = m.compute_thrust(self.lipo.nominal_voltage)
         current = m.compute_current(thrust)
 
-        # Safe current based on stator volume
-        safe = 20.0 * (m.stator_width * m.stator_height) / (23 * 6)
-        current_heat = clamp01(current / safe) if safe > 0 else 1.0
+        # Hard over‑current: above rating → max stress
+        if current >= m.current_rating:
+            return 1.0
 
-        # Prop load: area * pitch * blades
-        disk = prop_disk_area(m.prop.diameter)
-        prop_load = disk * m.prop.pitch * m.prop.blades
-        ref_load = prop_disk_area(5.0) * 4.5 * 3
-        prop_load_norm = clamp01(prop_load / ref_load)
+        # Current‑based stress (dominant, non-linear)
+        ratio = current / m.current_rating
+        current_stress = clamp01(ratio ** 2)
 
-        # RPM & cooling
+        # RPM & cooling as secondary modifiers
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
         rpm_norm = clamp01(rpm / 50000.0)
         cooling = clamp01(m.prop.diameter / 7.0)
 
-        # Motor stress: current dominates, prop load now matters more
         return clamp01(
-            0.55 * current_heat +      # main driver
-            0.25 * prop_load_norm +    # blades / pitch / diameter
-            0.20 * rpm_norm -
-            0.15 * cooling
+            0.75 * current_stress +   # main driver: how hard we're pushing the motor
+            0.25 * rpm_norm -         # high RPM adds some extra stress
+            0.15 * cooling            # bigger props cool a bit better
         )
+
 
 
     def overstressed_desync(self):
