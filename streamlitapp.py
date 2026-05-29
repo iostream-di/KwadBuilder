@@ -43,7 +43,7 @@ DEFAULT_5IN = {
     "fc_weight": 8,
 
     "esc_pwm": 48000,
-    "esc_demag": "med",
+    "esc_demag": "disabled",
     "esc_timing": "med",
     "esc_weight": 14,
 
