@@ -140,40 +140,42 @@ cfg = st.session_state.config
 # ---------------------------------------------------------
 
 def slider_with_buttons(label, minv, maxv, step, key):
+    value_key = f"{key}_value"
     slider_key = f"{key}_slider"
     minus_key = f"{key}_minus"
     plus_key = f"{key}_plus"
 
-    # Initialize the value
-    if key not in st.session_state:
-        st.session_state[key] = cfg[key]
+    # Initialize the true value
+    if value_key not in st.session_state:
+        st.session_state[value_key] = cfg[key]
 
     # Layout: [-] [slider] [+]
     col_minus, col_slider, col_plus = st.columns([1, 6, 1])
 
-    # Decrement button
+    # LEFT BUTTON (decrement)
     with col_minus:
         if st.button("−", key=minus_key):
-            st.session_state[key] = max(minv, st.session_state[key] - step)
+            st.session_state[value_key] = max(minv, st.session_state[value_key] - step)
 
-    # Slider (reads from session_state)
+    # SLIDER (reads from true value)
     with col_slider:
-        st.session_state[key] = st.slider(
+        st.session_state[value_key] = st.slider(
             label,
             min_value=minv,
             max_value=maxv,
-            value=st.session_state[key],
+            value=st.session_state[value_key],
             step=step,
             key=slider_key
         )
 
-    # Increment button
+    # RIGHT BUTTON (increment)
     with col_plus:
         if st.button("+", key=plus_key):
-            st.session_state[key] = min(maxv, st.session_state[key] + step)
+            st.session_state[value_key] = min(maxv, st.session_state[value_key] + step)
 
     # Update cfg
-    cfg[key] = st.session_state[key]
+    cfg[key] = st.session_state[value_key]
+
 
 # ---------------------------------------------------------
 # UI Sections
