@@ -142,10 +142,18 @@ cfg = st.session_state.config
 def slider_with_input(label, minv, maxv, step, key):
     col1, col2 = st.columns([3,1])
     with col1:
-        sval = st.slider(label, minv, maxv, cfg[key], step)
+        sval = st.slider(label, minv, maxv, cfg[key], step, key=f"{key}_slider")
     with col2:
-        tval = st.number_input(" ", min_value=minv, max_value=maxv, value=sval, step=step)
+        tval = st.number_input(
+            " ",
+            min_value=minv,
+            max_value=maxv,
+            value=sval,
+            step=step,
+            key=f"{key}_input"
+        )
     cfg[key] = tval
+
 
 
 # ---------------------------------------------------------
