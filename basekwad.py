@@ -125,7 +125,7 @@ class LiPo:
         return base * ir_multiplier
 
     def usable_mah(self):
-        return self.capacity * 0.8 * self.health
+        return self.capacity * 0.9 * self.health
 
 
 class Frame:
@@ -292,7 +292,7 @@ class Kwad:
             return 0.0
         usable_mah = self.lipo.usable_mah()
         # Slightly more optimistic than before (was 80.0)
-        return (usable_mah / 1000.0) / amps * 90.0
+        return (usable_mah / 1000.0) / amps * 95.0
 
     def flight_time(self):
         return self.flight_time_profile("Cruise")
