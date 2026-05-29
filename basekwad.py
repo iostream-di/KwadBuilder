@@ -368,7 +368,15 @@ class Kwad:
 
         # Current‑based stress (dominant, non-linear)
         ratio = current / m.current_rating
-        current_stress = clamp01((ratio - 0.3) / 0.5)
+
+        if ratio >= 0.7:
+            current_stress = 1.0
+        elif ratio <= 0.5:
+            current_stress = max(0.0, (ratio - 0.3) / 0.2) * 0.5  # up to 50% stress at 50% rating
+        else:
+            # 0.5–0.7 range ramps from 50% to 100% stress
+            current_stress = 0.5 + (ratio - 0.5) / 0.2 * 0.5
+
 
         # RPM & cooling as secondary modifiers
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
