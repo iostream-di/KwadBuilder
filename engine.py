@@ -1,15 +1,14 @@
 """
 engine.py
 
-The physics computation engine for Kwadstream.
+Physics computation engine for Kwadstream.
 
 This module:
-- Imports pure data models from basekwad.py
-- Imports physics constants & equations from physics.py
-- Computes thrust, power, AUW, flight time, thermal rise, etc.
-- Applies user-tunable fuzz multipliers to all physics calls.
-
-No UI. No Streamlit. No magic numbers.
+- Computes AUW from component weights
+- Computes thrust, power, hover throttle, flight time
+- Computes thermal rise
+- Applies fuzz multipliers to all physics calls
+- Returns a KwadPerformance object for the UI
 """
 
 from __future__ import annotations
@@ -17,19 +16,41 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
+import physics as phys
 from basekwad import (
     Kwad, Motor, Propeller, Battery, ESC, FlightController, VTX
 )
 
-import physics as phys
-
 
 # ============================================================
-# Utility: mass/weight conversions
+# AUW Calculation
 # ============================================================
 
 def auw_kg(kwad: Kwad) -> float:
-    return kwad.auw_g / 1000.0
+    """Compute AUW from all component weights."""
+    total_g = 0.0
+
+    total_g += kwad.frame.dry_weight_g
+    total_g += kwad.esc.weight_g
+    total_g += kwad.fc.weight_g
+    total_g += kwad.vtx.weight_g
+    total_g += kwad.camera.weight_g
+    total_g += kwad.receiver.weight_g
+    total_g += kwad.battery.weight_g
+
+    if kwad.action_cam:
+        total_g += kwad.action_cam.weight_g
+
+    # motors
+    for m in kwad.motors:
+        total_g += m.weight_g
+
+    # props (optional weight)
+    for p in kwad.props:
+        if hasattr(p, "weight_g"):
+            total_g += p.weight_g
+
+    return total_g / 1000.0
 
 
 # ============================================================
@@ -37,22 +58,19 @@ def auw_kg(kwad: Kwad) -> float:
 # ============================================================
 
 def motor_rpm_from_voltage(motor: Motor, voltage_v: float) -> float:
-    """RPM = Kv * V (no-load approximation)."""
     return motor.kv_rpm_per_v * voltage_v
 
 
 def motor_torque_from_thrust(thrust_n: float, prop: Propeller, fuzz: phys.Fuzz) -> float:
-    """
-    Approximate torque required for a given thrust.
-    This is a placeholder for a more advanced prop model.
-    """
-    disk_area = phys.disk_area_from_diameter(prop.diameter_m)
-    if disk_area <= 0:
+    """Approximate torque from thrust using induced power."""
+    area = phys.disk_area_from_diameter(prop.diameter_m)
+    if area <= 0:
         return 0.0
 
-    # Induced power → torque
     p = phys.prop_power_from_thrust(thrust_n, prop.diameter_m, fuzz)
-    rpm = 5000  # placeholder; engine will iterate to solve this
+
+    # crude RPM estimate (placeholder)
+    rpm = 5000
     omega = (rpm * 2 * 3.14159) / 60
     if omega <= 0:
         return 0.0
@@ -88,25 +106,15 @@ def static_thrust(motor: Motor, prop: Propeller, voltage_v: float, fuzz: phys.Fu
 # ============================================================
 
 def battery_full_voltage(battery: Battery) -> float:
-    return phys.pack_voltage_full(
-        battery.cells_series,
-        battery.chemistry
-    )
+    return phys.pack_voltage_full(battery.cells_series, battery.chemistry)
 
 
 def battery_nominal_voltage(battery: Battery) -> float:
-    return phys.pack_voltage_nominal(
-        battery.cells_series,
-        battery.chemistry
-    )
+    return phys.pack_voltage_nominal(battery.cells_series, battery.chemistry)
 
 
 def battery_sag_voltage(battery: Battery, current_a: float, fuzz: phys.Fuzz) -> float:
-    r = phys.pack_internal_resistance(
-        battery.cells_series,
-        battery.chemistry,
-        fuzz
-    )
+    r = phys.pack_internal_resistance(battery.cells_series, battery.chemistry, fuzz)
     v_oc = battery_full_voltage(battery)
     return phys.voltage_sag_under_load(v_oc, current_a, r)
 
@@ -192,29 +200,6 @@ def esc_temperature_rise(esc: ESC, current_a: float, time_s: float, fuzz: phys.F
     )
 
 
-def fc_temperature_rise(fc: FlightController, power_w: float, time_s: float, fuzz: phys.Fuzz) -> float:
-    if fc.thermal_model is None:
-        return 0.0
-
-    return phys.transient_temp_rise(power_w, fc.thermal_model, fuzz, time_s)
-
-
-def vtx_temperature_rise(vtx: VTX, power_mw: float, time_s: float, fuzz: phys.Fuzz) -> float:
-    if vtx.thermal_model is None:
-        return 0.0
-
-    power_w = power_mw / 1000.0
-    return phys.transient_temp_rise(power_w, vtx.thermal_model, fuzz, time_s)
-
-
-# ============================================================
-# Forward Flight / Drag / Top Speed
-# ============================================================
-
-def drag_force(kwad: Kwad, airspeed_mps: float, area_m2: float, cd: float, fuzz: phys.Fuzz) -> float:
-    return phys.drag_force(airspeed_mps, area_m2, cd, fuzz)
-
-
 # ============================================================
 # High-Level Evaluation
 # ============================================================
@@ -253,8 +238,13 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
         motor_torque_from_thrust(thrust_per_motor, kwad.props[0], fuzz),
         fuzz
     )
-    motor_temp = motor_temperature_rise(kwad.motors[0], motor_current_est, 60, fuzz)
-    esc_temp = esc_temperature_rise(kwad.esc, motor_current_est, 60, fuzz)
+    motor_temp = esc_temp = 0.0
+
+    if hasattr(kwad.motors[0], "thermal_model") and kwad.motors[0].thermal_model:
+        motor_temp = motor_temperature_rise(kwad.motors[0], motor_current_est, 60, fuzz)
+
+    if hasattr(kwad.esc, "thermal_model") and kwad.esc.thermal_model:
+        esc_temp = esc_temperature_rise(kwad.esc, motor_current_est, 60, fuzz)
 
     # Max thrust
     max_thrust_per_motor = static_thrust(kwad.motors[0], kwad.props[0], v_full, fuzz)
