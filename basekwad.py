@@ -383,7 +383,15 @@ class Kwad:
         return clamp01(base * (1.0 + 0.4 * (1.0 - demag_norm)))
 
     def overstressed_voltage_sag(self):
-        return clamp01(self.voltage_sag() / 0.3)
+        sag = self.voltage_sag()  # raw fraction, e.g. 0.05 = 5%
+
+        # Normalize sag severity realistically
+        # 0.00 → 0%
+        # 0.03 → 25%
+        # 0.07 → 50%
+        # 0.12 → 100%
+        return clamp01((sag - 0.03) / (0.12 - 0.03))
+
 
     def overstressed_overall(self):
         return clamp01((
