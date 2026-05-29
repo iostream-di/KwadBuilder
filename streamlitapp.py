@@ -140,19 +140,64 @@ cfg = st.session_state.config
 # ---------------------------------------------------------
 
 def slider_with_input(label, minv, maxv, step, key):
-    col1, col2 = st.columns([3,1])
+    slider_key = f"{key}_slider"
+    input_key = f"{key}_input"
+    prev_key = f"{key}_prev"
+
+    # Initial setup
+    if prev_key not in st.session_state:
+        st.session_state[prev_key] = cfg[key]
+        st.session_state[slider_key] = cfg[key]
+        st.session_state[input_key] = cfg[key]
+
+    col1, col2 = st.columns([3, 1])
+
     with col1:
-        sval = st.slider(label, minv, maxv, cfg[key], step, key=f"{key}_slider")
+        sval = st.slider(
+            label,
+            minv,
+            maxv,
+            value=st.session_state[slider_key],
+            step=step,
+            key=slider_key,
+        )
+
     with col2:
-        tval = st.number_input(
+        ival = st.number_input(
             " ",
             min_value=minv,
             max_value=maxv,
-            value=sval,
+            value=st.session_state[input_key],
             step=step,
-            key=f"{key}_input"
+            key=input_key,
         )
-    cfg[key] = tval
+
+    prev = st.session_state[prev_key]
+    s_now = st.session_state[slider_key]
+    i_now = st.session_state[input_key]
+
+    # Decide which control changed this run
+    if s_now != prev and i_now == prev:
+        new_val = s_now          # slider changed
+    elif i_now != prev and s_now == prev:
+        new_val = i_now          # input changed
+    else:
+        new_val = s_now          # default / both same / ambiguous
+
+    # Clamp just in case
+    if isinstance(minv, float) or isinstance(maxv, float):
+        new_val = float(new_val)
+    else:
+        new_val = int(new_val)
+
+    new_val = max(minv, min(maxv, new_val))
+
+    # Sync everything
+    st.session_state[prev_key] = new_val
+    st.session_state[slider_key] = new_val
+    st.session_state[input_key] = new_val
+    cfg[key] = new_val
+
 
 
 
