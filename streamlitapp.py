@@ -26,8 +26,8 @@ DEFAULT_5IN = {
     "motor_kv": 1950,
     "motor_stator_d": 23,
     "motor_stator_h": 7,
-    "motor_weight": 32,
     "motor_current_rating": 40,
+    "motor_weight": 32,
 
     "lipo_cells": 6,
     "lipo_capacity": 1500,
@@ -74,8 +74,8 @@ DEFAULT_WHOOP = {
     "motor_kv": 19000,
     "motor_stator_d": 8,
     "motor_stator_h": 2,
-    "motor_weight": 3,
     "motor_current_rating": 5,
+    "motor_weight": 3,
 
     "lipo_cells": 1,
     "lipo_capacity": 300,
