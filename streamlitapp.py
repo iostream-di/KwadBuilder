@@ -4,7 +4,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Theoretical FPV Build Explorer", layout="centered")
 
-st.title("🛠️ Theoretical FPV Build Explorer")
+st.title("Theoretical FPV Build Explorer")
 st.write("Play with sliders, presets, and theory to explore how an FPV build might behave.")
 
 
@@ -91,27 +91,25 @@ def heat_from_current(load_current, safe_current):
 
 
 def motor_kt_nm_per_a(kv_rpm_per_v: float) -> float:
-    # Kt [Nm/A] ≈ 60 / (2π * KV)
     if kv_rpm_per_v <= 0:
         return 0.0
     return 60.0 / (2 * math.pi * kv_rpm_per_v)
 
 
 def prop_inertia_relative(diameter_in: float, pitch_in: float, blades: int) -> float:
-    # Relative inertia ~ area * pitch * blades
     area = prop_disk_area(diameter_in)
     return area * pitch_in * blades
 
 
 def esc_thermal_response(load_current_a: float, esc_rating_a: float) -> float:
-    # Simple I^2 scaling vs rating
     if esc_rating_a <= 0:
         return 1.0
     ratio = (load_current_a ** 2) / (esc_rating_a ** 2)
     return clamp01(0.4 * ratio)
 
 
-def build_style_label(twr, flight_time, prop_size, auw):
+def build_style_label(twr, flight_time, prop_size, auw, max_payload_g):
+    # Adjective from TWR
     if twr < 2:
         adjective = "Mild"
     elif twr < 4:
@@ -121,19 +119,30 @@ def build_style_label(twr, flight_time, prop_size, auw):
     else:
         adjective = "Extreme"
 
-    # Toothpick first
+    # Toothpick
     if prop_size <= 3.0 and auw < 120 and twr > 4:
         style = "Toothpick"
+    # Whoop
     elif prop_size <= 2.5 and auw < 80:
         style = "Whoop"
-    elif prop_size <= 3.5 and auw < 200:
+    # Kamikaze: 7–10", 1–2 kg AUW, 1–2 kg payload, 6–10 min
+    elif 7.0 <= prop_size <= 10.0 and 1000 <= auw <= 2000 and 1000 <= max_payload_g <= 2000 and 6 <= flight_time <= 10:
+        style = "Kamikaze"
+    # Utility: 7–17", heavy AUW, heavy payload, long flight time
+    elif 7.0 <= prop_size <= 17.0 and auw >= 1200 and max_payload_g >= 1500 and flight_time >= 12:
+        style = "Utility"
+    # Freestyle
+    elif 3.0 <= prop_size <= 5.1 and 200 <= auw <= 800 and 4 <= twr <= 8:
         style = "Freestyle"
-    elif prop_size <= 4.5 and flight_time > 8:
-        style = "Cinelog"
-    elif prop_size >= 5 and flight_time > 10:
-        style = "Long Range"
-    elif prop_size >= 5 and twr > 6:
+    # Racing
+    elif abs(prop_size - 5.0) < 0.2 and 400 <= auw <= 600 and twr >= 8:
         style = "Racing"
+    # Cinelog
+    elif 3.0 <= prop_size <= 4.5 and 180 <= auw <= 350 and flight_time > 8 and twr < 4:
+        style = "Cinelog"
+    # Long Range
+    elif prop_size >= 6.0 and 2 <= twr <= 4 and flight_time > 10:
+        style = "Long Range"
     else:
         style = "General Purpose"
 
@@ -159,17 +168,27 @@ def heat_color(heat_0_1: float) -> str:
 def colored_percentage(label, value):
     pct = int(value * 100)
     if pct < 40:
-        color = "🟦"
+        color = "#2E86DE"
     elif pct < 70:
-        color = "🟨"
+        color = "#F1C40F"
     else:
-        color = "🟥"
-    st.metric(label, f"{color} {pct}%")
+        color = "#E74C3C"
+    st.markdown(
+        f"**{label}:** "
+        f"<span style='color:{color}; font-weight:bold;'>{pct}%</span>",
+        unsafe_allow_html=True,
+    )
 
 
 # -----------------------------
 # Presets & session state
 # -----------------------------
+
+PROP_SIZE_OPTIONS = [
+    1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5,
+    5.0, 5.1, 5.5, 6.0, 6.5, 7.0, 8.0, 9.0,
+    10.0, 12.0, 13.0, 15.0, 17.0
+]
 
 DEFAULT_BUILD = {
     "prop_size": 5.0,
@@ -251,6 +270,32 @@ PRESETS = {
         "auw": 80,
         "motor_count": 4,
     },
+    "Kamikaze Example": {
+        "prop_size": 8.0,
+        "prop_pitch": 4.5,
+        "prop_blades": 3,
+        "motor_kv": 1200,
+        "stator_d": 28,
+        "stator_h": 7,
+        "lipo_s": 6,
+        "lipo_capacity": 6000,
+        "lipo_c": 60,
+        "auw": 1500,
+        "motor_count": 4,
+    },
+    "Utility Example": {
+        "prop_size": 12.0,
+        "prop_pitch": 4.0,
+        "prop_blades": 2,
+        "motor_kv": 900,
+        "stator_d": 35,
+        "stator_h": 8,
+        "lipo_s": 6,
+        "lipo_capacity": 10000,
+        "lipo_c": 60,
+        "auw": 2000,
+        "motor_count": 4,
+    },
 }
 
 if "build" not in st.session_state:
@@ -282,7 +327,12 @@ st.subheader("Build parameters")
 
 b = st.session_state.build
 
-prop_size = st.slider("Prop size (inches)", 1.0, 8.0, b["prop_size"], 0.5, key="prop_size")
+prop_size = st.selectbox(
+    "Prop size (inches)",
+    PROP_SIZE_OPTIONS,
+    index=PROP_SIZE_OPTIONS.index(b["prop_size"]),
+    key="prop_size",
+)
 prop_pitch = st.slider("Prop pitch (inches)", 0.8, 8.0, b["prop_pitch"], 0.1, key="prop_pitch")
 prop_blades = st.slider("Prop blades", 2, 8, b["prop_blades"], 1, key="prop_blades")
 motor_kv = st.slider("Motor KV", 300, 30000, b["motor_kv"], 50, key="motor_kv")
@@ -292,9 +342,13 @@ lipo_s = st.slider("LiPo cells (S)", 1, 8, b["lipo_s"], 1, key="lipo_s")
 lipo_capacity = st.slider("LiPo capacity (mAh)", 260, 20000, b["lipo_capacity"], 10, key="lipo_capacity")
 lipo_c = st.slider("LiPo C rating", 20, 150, b["lipo_c"], 1, key="lipo_c")
 auw = st.slider("All-up weight (g)", 15, 2000, b["auw"], 5, key="auw")
-motor_count = st.selectbox("Motor count", [4, 6, 8, 12], index=[4, 6, 8, 12].index(b["motor_count"]), key="motor_count")
+motor_count = st.selectbox(
+    "Motor count",
+    [4, 6, 8, 12],
+    index=[4, 6, 8, 12].index(b["motor_count"]),
+    key="motor_count",
+)
 
-# Keep session_state in sync
 st.session_state.build.update(
     dict(
         prop_size=prop_size,
@@ -340,6 +394,7 @@ thrust_per_motor_g = estimate_thrust_per_motor_g(
 total_thrust_g = thrust_per_motor_g * motor_count
 twr = total_thrust_g / auw if auw > 0 else 0.0
 
+# Max payload where TWR ≈ 2
 max_payload_g = max(total_thrust_g / 2.0 - auw, 0.0)
 
 max_speed_mps = pitch_speed_mps(prop_pitch, rpm_ld)
@@ -376,9 +431,7 @@ motor_heat = heat_from_current(current_per_motor_a, 25.0)
 overall_heat = clamp01((fc_heat + esc_heat + motor_heat + desync_potential) / 4.0)
 
 
-# Dynamic TWR vs throttle
 def twr_at_throttle(throttle: float) -> float:
-    # throttle in [0,1]
     thrust = total_thrust_g * (throttle ** 1.1)
     return thrust / auw if auw > 0 else 0.0
 
@@ -430,7 +483,7 @@ with colH4:
 # Build style & HEAT bar
 # -----------------------------
 
-style_label = build_style_label(twr, flight_time_min, prop_size, auw)
+style_label = build_style_label(twr, flight_time_min, prop_size, auw, max_payload_g)
 st.subheader("Build style")
 st.write(f"**Theoretical feel:** `{style_label}`")
 
@@ -494,202 +547,155 @@ st.download_button(
 # FPV THEORY & FORMULAS SECTION
 # -----------------------------
 
-st.header("📘 FPV Theory, Math & Community Reference")
-
-st.markdown(r"""
-## 🧮 Core Math Formulas Used
-
-### 1. Motor RPM
-**No‑load RPM:**
-
-
-\[
-RPM_{NL} = KV \times V
-\]
-
-
-
-**Loaded RPM (typical 70–80% of no‑load):**
-
-
-\[
-RPM_{L} \approx RPM_{NL} \times 0.78
-\]
-
-
-
----
-
-### 2. Pitch Speed (ideal, no drag)
-
-
-\[
-V_{pitch} = Pitch_{in} \times 0.0254 \times \frac{RPM}{60}
-\]
-
-
-
----
-
-### 3. Prop Disk Area
-
-
-\[
-A = \pi r^2 = \pi \left(\frac{D_{in} \times 0.0254}{2}\right)^2
-\]
-
-
-
----
-
-### 4. Thrust Estimation (heuristic)
-
-
-\[
-T \propto A \cdot Pitch^{0.4} \cdot RPM^{0.9} \cdot Blades \cdot MotorFactor
-\]
-
-
-
----
-
-### 5. Current Draw (heuristic)
-
-
-\[
-I \propto \left(\frac{Thrust}{150g}\right)^{1.25}
-\]
-
-
-
----
-
-### 6. Battery Safe Current
-
-
-\[
-I_{safe} = C \times Ah
-\]
-
-
-
----
-
-### 7. Flight Time Estimate
-
-
-\[
-t = \frac{0.8 \cdot Capacity_{Ah}}{I_{cruise}} \times 60
-\]
-
-
-
----
-
-### 8. Thrust‑to‑Weight Ratio
-
-
-\[
-TWR = \frac{TotalThrust}{AUW}
-\]
-
-
-
----
-
-### 9. Motor Torque Constant
-
-
-\[
-K_t \,[Nm/A] \approx \frac{60}{2\pi \cdot KV}
-\]
-
-
-
-Higher KV → lower \(K_t\) → less torque margin for heavy props → more desync risk.
-
----
-
-### 10. Prop Inertia (relative)
-
-
-\[
-I_{prop} \propto A \cdot Pitch \cdot Blades
-\]
-
-
-
-Higher inertia + low torque = harder to accelerate/decellerate → more desync risk.
-
----
-
-## 🛸 Community‑Established Reference Values
-
-### Typical Loaded RPM Ranges
-| Build Type | Prop Size | Loaded RPM Range |
-|------------|-----------|------------------|
-| Whoop (1–2") | 1.6–2.0" | 28,000–45,000 |
-| Toothpick (2.5–3") | 2.5–3.0" | 32,000–48,000 |
-| 3" Freestyle | 3.0" | 38,000–48,000 |
-| 5" Freestyle | 5.0" | 28,000–36,000 |
-| 5" Racing | 5.0" | 34,000–42,000 |
-| 7" Long Range | 7.0" | 18,000–26,000 |
-
----
-
-### Typical AUW by Build Type
-| Build Type | AUW Range |
-|------------|-----------|
-| Whoop | 20–45 g |
-| Toothpick | 55–120 g |
-| 3" Freestyle | 120–200 g |
-| 5" Freestyle | 650–800 g |
-| 5" Racing | 430–550 g |
-| 7" Long Range | 650–1100 g |
-| Cinewhoop (3–3.5") | 180–320 g |
-
----
-
-### Typical TWR Ranges
-| Build Type | TWR Range | Notes |
-|------------|-----------|-------|
-| Whoop | 2–3 | Flips, limited punch |
-| Toothpick | 4–7 | Very high for weight |
-| 3" Freestyle | 4–6 | Snappy, responsive |
-| 5" Freestyle | 5–8 | Classic “feel good” zone |
-| 5" Racing | 8–12 | Brutal acceleration |
-| Cinematic | 2–4 | Smooth, stable |
-| Kamikaze / Bando | 6–10 | Heavy props, high heat |
-| Long Range | 2–3 | Efficiency focused |
-
----
-
-## Build Style: Toothpick
-
-A **Toothpick** build is recognized when:
-
-- Prop size ≤ 3"  
-- AUW < 120 g  
-- TWR > 4  
-
-It appears as:
-
-`Mild Toothpick`, `Average Toothpick`, `Aggressive Toothpick`, `Extreme Toothpick`.
-
----
-
-These models are intentionally approximate: fast, intuitive, and tuned to match community “feel” rather than lab‑grade thrust‑stand data.
-""")
-
-# End of FPV Theory Section
-# -----------------------------
-# Footer
-# -----------------------------
+st.header("FPV Theory, Math & Community Reference")
+
+st.subheader("Core math formulas used")
+
+st.markdown("**1. Motor RPM**")
+st.latex(r"RPM_{NL} = KV \cdot V")
+st.latex(r"RPM_{L} \approx RPM_{NL} \cdot 0.78")
+
+st.markdown("---")
+st.markdown("**2. Pitch speed (ideal, no drag)**")
+st.latex(r"V_{pitch} = Pitch_{in} \cdot 0.0254 \cdot \frac{RPM}{60}")
+
+st.markdown("---")
+st.markdown("**3. Prop disk area**")
+st.latex(r"A = \pi r^2 = \pi \left(\frac{D_{in} \cdot 0.0254}{2}\right)^2")
+
+st.markdown("---")
+st.markdown("**4. Thrust estimation (heuristic)**")
+st.latex(r"T \propto A \cdot Pitch^{0.4} \cdot RPM^{0.9} \cdot Blades \cdot MotorFactor")
+
+st.markdown("---")
+st.markdown("**5. Current draw (heuristic)**")
+st.latex(r"I \propto \left(\frac{Thrust}{150\,g}\right)^{1.25}")
+
+st.markdown("---")
+st.markdown("**6. Battery safe current**")
+st.latex(r"I_{\text{safe}} = C \cdot Ah")
+
+st.markdown("---")
+st.markdown("**7. Flight time estimate**")
+st.latex(r"t = \frac{0.8 \cdot Capacity_{Ah}}{I_{\text{cruise}}} \cdot 60")
+
+st.markdown("---")
+st.markdown("**8. Thrust-to-weight ratio**")
+st.latex(r"TWR = \frac{T_{\text{total}}}{W}")
+
+st.markdown("---")
+st.markdown("**9. Motor torque constant**")
+st.latex(r"K_t \,[Nm/A] \approx \frac{60}{2\pi \cdot KV}")
+
+st.markdown("---")
+st.markdown("**10. Prop inertia (relative)**")
+st.latex(r"I_{\text{prop}} \propto A \cdot Pitch \cdot Blades")
+
+
+st.subheader("Community reference values")
+
+st.markdown("**Typical loaded RPM ranges**")
+st.table({
+    "Build Type": [
+        "Whoop (1–2\")",
+        "Toothpick (2.5–3\")",
+        "3\" Freestyle",
+        "5\" Freestyle",
+        "5\" Racing",
+        "7\" Long Range",
+        "Kamikaze",
+        "Utility",
+    ],
+    "Prop Size": [
+        "1.6–2.0\"",
+        "2.5–3.0\"",
+        "3.0\"",
+        "5.0\"",
+        "5.0\"",
+        "7.0\"",
+        "7–10\"",
+        "7–17\"",
+    ],
+    "Loaded RPM Range": [
+        "28,000–45,000",
+        "32,000–48,000",
+        "38,000–48,000",
+        "28,000–36,000",
+        "34,000–42,000",
+        "18,000–26,000",
+        "18,000–26,000",
+        "12,000–22,000",
+    ],
+})
+
+st.markdown("---")
+st.markdown("**Typical AUW by build type**")
+st.table({
+    "Build Type": [
+        "Whoop",
+        "Toothpick",
+        "3\" Freestyle",
+        "5\" Freestyle",
+        "5\" Racing",
+        "7\" Long Range",
+        "Cinewhoop (3–3.5\")",
+        "Kamikaze",
+        "Utility",
+    ],
+    "AUW Range": [
+        "20–45 g",
+        "55–120 g",
+        "120–200 g",
+        "650–800 g",
+        "430–550 g",
+        "650–1100 g",
+        "180–320 g",
+        "1000–2000 g",
+        "1500–4000 g (or more)",
+    ],
+})
+
+st.markdown("---")
+st.markdown("**Typical TWR ranges**")
+st.table({
+    "Build Type": [
+        "Whoop",
+        "Toothpick",
+        "3\" Freestyle",
+        "5\" Freestyle",
+        "5\" Racing",
+        "Cinematic",
+        "Kamikaze",
+        "Utility",
+        "Long Range",
+    ],
+    "TWR Range": [
+        "2–3",
+        "4–7",
+        "4–6",
+        "5–8",
+        "8–12",
+        "2–4",
+        "2.5–4",
+        "1.5–3",
+        "2–3",
+    ],
+    "Notes": [
+        "Flips, limited punch",
+        "Very high for weight",
+        "Snappy, responsive",
+        "Classic “feel good” zone",
+        "Brutal acceleration",
+        "Smooth, stable",
+        "Maneuverable with 1–2 kg payload",
+        "Heavy lift, sluggish, payload-focused",
+        "Efficiency-focused cruising",
+    ],
+})
 
 st.write("---")
 st.caption(
     "This FPV Build Explorer is a theoretical modeling tool. "
     "All values are approximations tuned to community experience, not laboratory measurements. "
-    "Use this tool to understand trends, relationships, and build behavior — "
-    "but always validate with real-world testing."
+    "Use it to understand trends and relationships, then validate with real-world testing."
 )
