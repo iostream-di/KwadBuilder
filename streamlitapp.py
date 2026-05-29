@@ -2,7 +2,7 @@ import json
 import streamlit as st
 from basekwad import (
     Propeller, Motor, LiPo, Frame, Flight_Controller,
-    Electronic_Speed_Controller, All_In_One, Video_System,
+    Electronic_Speed_Controller, Video_System,
     Radio_Link, Action_Cam, Kwad, clamp01
 )
 
@@ -43,7 +43,7 @@ DEFAULT_5IN = {
     "fc_weight": 8,
 
     "esc_pwm": 48000,
-    "esc_demag": "disabled",
+    "esc_demag": "low",
     "esc_timing": "med",
     "esc_weight": 14,
 
@@ -119,7 +119,7 @@ def load_preset(preset):
 
 
 # ---------------------------------------------------------
-# UI – Preset Buttons
+# Preset Buttons
 # ---------------------------------------------------------
 
 colA, colB = st.columns(2)
@@ -136,74 +136,77 @@ cfg = st.session_state.config
 
 
 # ---------------------------------------------------------
-# UI – Component Inputs
+# Helper: Slider + Text Input Combo
 # ---------------------------------------------------------
 
-st.subheader("Propeller")
+def slider_with_input(label, minv, maxv, step, key):
+    col1, col2 = st.columns([3,1])
+    with col1:
+        sval = st.slider(label, minv, maxv, cfg[key], step)
+    with col2:
+        tval = st.number_input(" ", min_value=minv, max_value=maxv, value=sval, step=step)
+    cfg[key] = tval
 
-cfg["prop_diameter"] = st.slider("Diameter (in)", 1.0, 17.0, cfg["prop_diameter"], 0.1)
-cfg["prop_pitch"] = st.slider("Pitch (in)", 0.5, 8.0, cfg["prop_pitch"], 0.1)
-cfg["prop_blades"] = st.slider("Blades", 2, 8, cfg["prop_blades"])
-cfg["prop_weight"] = st.slider("Prop weight (g)", 0.1, 10.0, cfg["prop_weight"], 0.1)
 
-st.subheader("Motors")
+# ---------------------------------------------------------
+# UI Sections
+# ---------------------------------------------------------
 
-cfg["motor_kv"] = st.slider("Motor KV", 500, 30000, cfg["motor_kv"], 50)
-cfg["motor_stator_h"] = st.slider("Stator height (mm)", 2, 15, cfg["motor_stator_h"])
-cfg["motor_stator_d"] = st.slider("Stator diameter (mm)", 5, 35, cfg["motor_stator_d"])
-cfg["motor_weight"] = st.slider("Motor weight (g)", 2, 60, cfg["motor_weight"])
-cfg["motor_count"] = st.selectbox("Motor count", [4, 6, 8, 12], index=[4,6,8,12].index(cfg["motor_count"]))
+with st.expander("Propeller", expanded=False):
+    slider_with_input("Diameter (in)", 1.0, 17.0, 0.1, "prop_diameter")
+    slider_with_input("Pitch (in)", 0.5, 8.0, 0.1, "prop_pitch")
+    slider_with_input("Blades", 2, 8, 1, "prop_blades")
+    slider_with_input("Prop weight (g)", 0.1, 10.0, 0.1, "prop_weight")
 
-st.subheader("Battery")
+with st.expander("Motors", expanded=False):
+    slider_with_input("Motor KV", 500, 30000, 50, "motor_kv")
+    slider_with_input("Stator height (mm)", 2, 15, 1, "motor_stator_h")
+    slider_with_input("Stator diameter (mm)", 5, 35, 1, "motor_stator_d")
+    slider_with_input("Motor weight (g)", 2, 60, 1, "motor_weight")
+    cfg["motor_count"] = st.selectbox("Motor count", [4,6,8,12], index=[4,6,8,12].index(cfg["motor_count"]))
 
-cfg["lipo_cells"] = st.slider("Cells (S)", 1, 8, cfg["lipo_cells"])
-cfg["lipo_capacity"] = st.slider("Capacity (mAh)", 200, 20000, cfg["lipo_capacity"], 10)
-cfg["lipo_c"] = st.slider("C rating", 20, 150, cfg["lipo_c"])
-cfg["lipo_weight"] = st.slider("Battery weight (g)", 5, 600, cfg["lipo_weight"])
+with st.expander("Battery", expanded=False):
+    slider_with_input("Cells (S)", 1, 8, 1, "lipo_cells")
+    slider_with_input("Capacity (mAh)", 200, 20000, 10, "lipo_capacity")
+    slider_with_input("C rating", 20, 150, 1, "lipo_c")
+    slider_with_input("Battery weight (g)", 5, 600, 1, "lipo_weight")
 
-st.subheader("Frame")
+with st.expander("Frame", expanded=False):
+    slider_with_input("Frame noise (0–100)", 0, 100, 1, "frame_noise")
+    slider_with_input("Wheelbase (mm)", 50, 500, 1, "frame_wheelbase")
+    slider_with_input("Max prop size (in)", 1.0, 17.0, 0.1, "frame_prop_fit")
+    slider_with_input("Frame weight (g)", 3, 300, 1, "frame_weight")
 
-cfg["frame_noise"] = st.slider("Frame noise (0–100)", 0, 100, cfg["frame_noise"])
-cfg["frame_wheelbase"] = st.slider("Wheelbase (mm)", 50, 500, cfg["frame_wheelbase"])
-cfg["frame_prop_fit"] = st.slider("Max prop size (in)", 1.0, 17.0, cfg["frame_prop_fit"], 0.1)
-cfg["frame_weight"] = st.slider("Frame weight (g)", 3, 300, cfg["frame_weight"])
+with st.expander("Flight Controller", expanded=False):
+    cfg["fc_loop"] = st.selectbox("PID loop frequency", [100,200,250,333,400,500,666,800,1000,2000,4000,8000],
+                                 index=[100,200,250,333,400,500,666,800,1000,2000,4000,8000].index(cfg["fc_loop"]))
+    slider_with_input("CPU load (%)", 10, 100, 1, "fc_cpu")
+    cfg["fc_dshot"] = st.selectbox("DShot", [300,600,1200], index=[300,600,1200].index(cfg["fc_dshot"]))
+    slider_with_input("FC weight (g)", 2, 20, 1, "fc_weight")
 
-st.subheader("Flight Controller")
+with st.expander("ESC", expanded=False):
+    cfg["esc_pwm"] = st.selectbox("PWM frequency", [24000,32000,48000,96000,128000,192000],
+                                  index=[24000,32000,48000,96000,128000,192000].index(cfg["esc_pwm"]))
+    cfg["esc_demag"] = st.selectbox("Demag compensation", ["disabled","low","high"],
+                                    index=["disabled","low","high"].index(cfg["esc_demag"]))
+    cfg["esc_timing"] = st.selectbox("Timing", ["low","med-low","med","med-high","high"],
+                                     index=["low","med-low","med","med-high","high"].index(cfg["esc_timing"]))
+    slider_with_input("ESC weight (g)", 2, 40, 1, "esc_weight")
 
-cfg["fc_loop"] = st.selectbox("PID loop frequency", [100,200,250,333,400,500,666,800,1000,2000,4000,8000],
-                              index=[100,200,250,333,400,500,666,800,1000,2000,4000,8000].index(cfg["fc_loop"]))
-cfg["fc_cpu"] = st.slider("CPU load (%)", 10, 100, cfg["fc_cpu"])
-cfg["fc_dshot"] = st.selectbox("DShot", [300, 600, 1200], index=[300,600,1200].index(cfg["fc_dshot"]))
-cfg["fc_weight"] = st.slider("FC weight (g)", 2, 20, cfg["fc_weight"])
+with st.expander("Video System", expanded=False):
+    slider_with_input("VTX power (mW)", 25, 2000, 25, "video_power")
+    slider_with_input("Video weight (g)", 2, 50, 1, "video_weight")
+    cfg["video_digital"] = st.checkbox("Digital video", cfg["video_digital"])
 
-st.subheader("ESC")
+with st.expander("Radio Link", expanded=False):
+    slider_with_input("Receiver weight (g)", 1, 20, 1, "rx_weight")
+    cfg["rx_elrs"] = st.checkbox("ELRS", cfg["rx_elrs"])
 
-cfg["esc_pwm"] = st.selectbox("PWM frequency", [24000,32000,48000,96000,128000,192000],
-                              index=[24000,32000,48000,96000,128000,192000].index(cfg["esc_pwm"]))
-cfg["esc_demag"] = st.selectbox("Demag compensation", ["disabled","low","high"],
-                                index=["disabled","low","high"].index(cfg["esc_demag"]))
-cfg["esc_timing"] = st.selectbox("Timing", ["low","med-low","med","med-high","high"],
-                                 index=["low","med-low","med","med-high","high"].index(cfg["esc_timing"]))
-cfg["esc_weight"] = st.slider("ESC weight (g)", 2, 40, cfg["esc_weight"])
+with st.expander("Action Camera", expanded=False):
+    slider_with_input("Action cam weight (g)", 0, 200, 1, "cam_weight")
 
-st.subheader("Video System")
-
-cfg["video_power"] = st.slider("VTX power (mW)", 25, 2000, cfg["video_power"])
-cfg["video_weight"] = st.slider("Video weight (g)", 2, 50, cfg["video_weight"])
-cfg["video_digital"] = st.checkbox("Digital video", cfg["video_digital"])
-
-st.subheader("Radio Link")
-
-cfg["rx_weight"] = st.slider("Receiver weight (g)", 1, 20, cfg["rx_weight"])
-cfg["rx_elrs"] = st.checkbox("ELRS", cfg["rx_elrs"])
-
-st.subheader("Action Camera")
-
-cfg["cam_weight"] = st.slider("Action cam weight (g)", 0, 200, cfg["cam_weight"])
-
-st.subheader("Payload")
-
-cfg["payload"] = st.slider("Payload weight (g)", 0, 2000, cfg["payload"], 5)
+with st.expander("Payload", expanded=False):
+    slider_with_input("Payload weight (g)", 0, 2000, 5, "payload")
 
 
 # ---------------------------------------------------------
@@ -297,29 +300,108 @@ st.write(f"**{quad.build_style()}**")
 
 
 # ---------------------------------------------------------
-# Import / Export
+# Import / Export (Collapsible)
 # ---------------------------------------------------------
 
-st.subheader("Build Profile I/O")
+with st.expander("Build Profile I/O", expanded=False):
+    export_json = json.dumps(cfg, indent=2)
+    st.download_button("Download Build JSON", export_json, "kwad_build.json", "application/json")
 
-export_json = json.dumps(cfg, indent=2)
-st.download_button("Download Build JSON", export_json, "kwad_build.json", "application/json")
-
-uploaded = st.file_uploader("Import Build JSON", type=["json"])
-if uploaded:
-    try:
-        data = json.load(uploaded)
-        st.session_state.config = data
-        st.success("Build imported successfully.")
-        st.experimental_rerun()
-    except Exception as e:
-        st.error(f"Failed to import JSON: {e}")
+    uploaded = st.file_uploader("Import Build JSON", type=["json"])
+    if uploaded:
+        try:
+            data = json.load(uploaded)
+            st.session_state.config = data
+            st.success("Build imported successfully.")
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"Failed to import JSON: {e}")
 
 
 # ---------------------------------------------------------
-# Theory Section
+# FPV Theory Section (Fully Populated)
 # ---------------------------------------------------------
 
-with st.expander("FPV Theory, Math & Community Reference"):
-    st.write("This section mirrors the formulas and reference tables from the BaseKwad engine.")
-    st.write("Use it to understand how the model works internally.")
+with st.expander("FPV Theory, Math & Community Reference", expanded=False):
+
+    st.markdown("## Motor Physics")
+    st.write("""
+    - **KV × Voltage = No‑load RPM**
+    - Loaded RPM ≈ 78% of no‑load RPM
+    - Torque ∝ stator volume (diameter × height)
+    - Higher KV → more RPM, less torque
+    - Lower KV → more torque, less RPM
+    - Motor cooling improves with larger props
+    """)
+
+    st.markdown("## Propeller Physics")
+    st.write("""
+    - Disk area = π × (diameter/2)²
+    - Thrust ∝ area^1.15 × pitch^0.75 × RPM^1.15
+    - More blades = more thrust but less efficiency
+    - Higher pitch = more speed but more current
+    - Small props are inefficient at high thrust
+    """)
+
+    st.markdown("## Battery Physics")
+    st.write("""
+    - Nominal voltage = 3.8V × cells (or 4.35V for HV)
+    - Internal resistance increases sag under load
+    - Safe current = C rating × capacity (Ah)
+    - Sag = I × R
+    - High sag reduces RPM and thrust
+    """)
+
+    st.markdown("## ESC Physics")
+    st.write("""
+    - PWM frequency affects smoothness and heat
+    - Demag compensation prevents desync
+    - Timing affects torque and efficiency
+    - High timing = more torque, more heat
+    """)
+
+    st.markdown("## Flight Controller Physics")
+    st.write("""
+    - Higher PID loop = more responsiveness
+    - Higher CPU load increases FC heat
+    - Frame noise affects filtering load
+    - DShot rate affects motor update speed
+    """)
+
+    st.markdown("## Build Style Definitions")
+    st.write("""
+    - **Whoop:** 1.6–2.0\" props, <80g AUW
+    - **Toothpick:** 2.5–3\" props, <120g AUW, TWR > 4
+    - **Freestyle:** 3–5\" props, 200–800g AUW, TWR 4–8
+    - **Racing:** 5\" props, 400–600g AUW, TWR 8–12
+    - **Long Range:** 6–7\" props, TWR 2–4, flight time > 10 min
+    - **Cinewhoop:** 3–3.5\" props, ducts, stable flight
+    - **Kamikaze:** 7–10\" props, 1–2kg AUW, 6–10 min
+    - **Utility:** 7–17\" props, 1.5–4kg AUW, payload‑focused
+    """)
+
+    st.markdown("## Community Reference Tables")
+
+    st.write("### Typical AUW Ranges")
+    st.table({
+        "Build": ["Whoop","Toothpick","3\"","5\" Freestyle","5\" Racing","7\" LR","Utility"],
+        "AUW (g)": ["20–45","55–120","120–200","650–800","430–550","650–1100","1500–4000+"]
+    })
+
+    st.write("### Typical TWR Ranges")
+    st.table({
+        "Build": ["Whoop","Toothpick","Freestyle","Racing","Long Range","Utility"],
+        "TWR": ["2–3","4–7","5–8","8–12","2–3","1.5–3"]
+    })
+
+    st.write("### Typical RPM Ranges")
+    st.table({
+        "Build": ["Whoop","Toothpick","3\"","5\"","7\""],
+        "Loaded RPM": ["28–45k","32–48k","38–48k","28–36k","18–26k"]
+    })
+
+    st.write("### Typical Flight Times")
+    st.table({
+        "Build": ["Whoop","Toothpick","Freestyle","Racing","Long Range"],
+        "Flight Time": ["3–5 min","3–6 min","4–7 min","1.5–3 min","12–25 min"]
+    })
