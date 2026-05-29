@@ -389,9 +389,13 @@ class Kwad:
             # 0.5–0.7 range ramps from 50% to 100% stress
             current_stress = 0.5 + (ratio - 0.5) / 0.2 * 0.5
 
-        # KV stress factor: higher KV = more heat for same load
+        # KV stress factor: high KV = exponentially more heat
         kv_ref = 1950.0  # baseline for 5" freestyle
-        kv_factor = clamp01((m.kv / kv_ref - 1.0) * 0.6)
+        kv_ratio = m.kv / kv_ref
+
+        # Exponential curve: 1.0 → 0, 1.2 → 0.3, 1.3 → 0.55, 1.4 → 0.8, 1.5 → 1.0
+        kv_factor = clamp01((kv_ratio - 1.0) ** 1.7)
+
 
         # RPM & cooling as secondary modifiers
         rpm = rpm_loaded(rpm_no_load(m.kv, self.lipo.nominal_voltage))
@@ -399,10 +403,10 @@ class Kwad:
         cooling = clamp01(m.prop.diameter / 7.0)
 
         return clamp01(
-            0.70 * current_stress +
-            0.15 * rpm_norm -
+            0.60 * current_stress +
+            0.10 * rpm_norm -
             0.10 * cooling +
-            0.25 * kv_factor
+            0.40 * kv_factor
         )
 
 
