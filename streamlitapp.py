@@ -142,24 +142,33 @@ cfg = st.session_state.config
 def slider_with_input(label, minv, maxv, step, key):
     slider_key = f"{key}_slider"
     input_key = f"{key}_input"
-    prev_key = f"{key}_prev"
 
-    # Initial setup
-    if prev_key not in st.session_state:
-        st.session_state[prev_key] = cfg[key]
-        st.session_state[slider_key] = cfg[key]
-        st.session_state[input_key] = cfg[key]
+    # Initialize session state for this field
+    if key not in st.session_state:
+        st.session_state[key] = cfg[key]
 
+    # Sync slider/input values BEFORE widget creation
+    if slider_key in st.session_state:
+        st.session_state[key] = st.session_state[slider_key]
+    if input_key in st.session_state:
+        st.session_state[key] = st.session_state[input_key]
+
+    # Clamp to bounds
+    val = st.session_state[key]
+    val = max(minv, min(maxv, val))
+    st.session_state[key] = val
+
+    # Render widgets
     col1, col2 = st.columns([3, 1])
 
     with col1:
         sval = st.slider(
             label,
-            minv,
-            maxv,
-            value=st.session_state[slider_key],
+            min_value=minv,
+            max_value=maxv,
+            value=val,
             step=step,
-            key=slider_key,
+            key=slider_key
         )
 
     with col2:
@@ -167,38 +176,19 @@ def slider_with_input(label, minv, maxv, step, key):
             " ",
             min_value=minv,
             max_value=maxv,
-            value=st.session_state[input_key],
+            value=val,
             step=step,
-            key=input_key,
+            key=input_key
         )
 
-    prev = st.session_state[prev_key]
-    s_now = st.session_state[slider_key]
-    i_now = st.session_state[input_key]
+    # Determine which widget changed
+    if sval != val:
+        st.session_state[key] = sval
+    elif ival != val:
+        st.session_state[key] = ival
 
-    # Decide which control changed this run
-    if s_now != prev and i_now == prev:
-        new_val = s_now          # slider changed
-    elif i_now != prev and s_now == prev:
-        new_val = i_now          # input changed
-    else:
-        new_val = s_now          # default / both same / ambiguous
-
-    # Clamp just in case
-    if isinstance(minv, float) or isinstance(maxv, float):
-        new_val = float(new_val)
-    else:
-        new_val = int(new_val)
-
-    new_val = max(minv, min(maxv, new_val))
-
-    # Sync everything
-    st.session_state[prev_key] = new_val
-    st.session_state[slider_key] = new_val
-    st.session_state[input_key] = new_val
-    cfg[key] = new_val
-
-
+    # Update cfg
+    cfg[key] = st.session_state[key]
 
 
 # ---------------------------------------------------------
