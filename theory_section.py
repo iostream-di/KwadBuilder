@@ -168,7 +168,15 @@ def render_theory_section():
 
         Builders can use this to sanity‑check prop pitch and blade count choices
         against their KV and cell count, before they buy props that are way too
-        heavy for their pack or ESC.
+        heavy for their pack or ESC. Remember, as with motor KV, you can deviate 
+        to an extent. 
+        
+        - Going lower will run cooler and safer and longer. Top speed 
+        is exchanged for higher small area resolution. Great for navigating tight 
+        spaces, or smooth attitude changes, like cinematic flying or long range recon. 
+        - Going higher will run hotter, bleed the pack faster, and risk motor desyncs. 
+        Small throttle movements are more exaggerated. High pitch is ideal for aggressive 
+        freestyle and racing since you are getting the punch you need from the props.
         """)
 
 
