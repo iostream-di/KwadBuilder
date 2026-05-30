@@ -43,7 +43,132 @@ def render_theory_section():
         st.latex(r"KV_{target} = \frac{RPM_{target}}{V_{pack}}")
 
         st.write("""
-        This produces KV values that match real‑world FPV builds.
+        This produces KV values that match real‑world FPV builds. You can go higer or 
+        lower than this by 10% to give you a decent change in your build character. 15% 
+        deviation is my max. Normally I have seen that -15% makes it too gentile, and 
+        +15% makes for one-time rockets.
+        """)
+
+        st.markdown("## Stator Diameter & Height Formula")
+
+        st.write("""
+        Once KV is known, the next step is choosing a motor size that can supply the 
+        torque required for your target AUW and prop size. This formula gives a 
+        recommended stator diameter and height using a simple torque-scaling model.
+        I personally just buy they widest motor out there with my target KV, unless I 
+        am building as light weight as possible, like a racer or toothpick. 
+        """)
+
+        st.markdown("### Step 1 — Inputs")
+        st.write("""
+        - **mₖg** = target AUW in kilograms  
+        - **Dᵢₙ** = prop diameter in inches  
+        """)
+
+        st.markdown("### Step 2 — Stator Diameter Formula")
+        st.latex(r"d_{mm} \approx 16 \cdot (m_{kg} \cdot D_{in})^{1/3}")
+
+        st.write("""
+        This formula is tuned so that typical FPV builds land in the correct stator 
+        diameter ranges:
+        - 5\" freestyle → ~23–25 mm  
+        - 3\" toothpick → ~11–12 mm  
+        - 7\" long‑range → ~28–30 mm  
+        """)
+
+        st.markdown("### Step 3 — Stator Height (Width‑Biased)")
+        st.latex(r"h_{mm} \approx 0.35 \cdot d_{mm}")
+
+        st.write("""
+        This biases toward wider stators, which provide better torque response and 
+        thermal handling for FPV flying styles.
+        """)
+
+        st.markdown("### Example Outputs")
+        st.write("""
+        - **5\" @ 750 g** → d ≈ 25 mm → h ≈ 8.7 mm → *2508 class*  
+        - **3\" @ 120 g** → d ≈ 11.4 mm → h ≈ 4.0 mm → *1104/1204 class*  
+        - **7\" @ 900 g** → d ≈ 29.6 mm → h ≈ 10.4 mm → *2806/3007 class*  
+        """)
+
+        st.write("""
+        This gives me a clean, physics‑inspired baseline motor size that you can 
+        adjust later based on flight style, efficiency goals, or weight constraints.
+        """)
+
+        st.markdown("## Marty's Prop Load Index — Pitch, KV, Cells, Blades")
+
+        st.write("""
+        This formula estimates how 'heavy' a prop feels electrically, combining:
+        - prop diameter
+        - prop pitch
+        - motor KV
+        - cell count
+        - blade count
+
+        The goal is to help choose a prop pitch that matches their intent
+        (gentle vs hot) without accidentally overloading the pack or ESC.
+        """)
+
+        st.markdown("### Step 1 — Inputs")
+        st.write("""
+        - **Dᵢₙ** = prop diameter in inches  
+        - **Pᵢₙ** = prop pitch in inches  
+        - **KV** = motor KV  
+        - **S** = cell count  
+        - **B** = blade count (2, 3, 4, …)  
+        """)
+
+        st.markdown("### Step 2 — Reference Values")
+        st.write("""
+        These define a 'normal' 5\" freestyle baseline:
+        - **KV_ref** = 1800  
+        - **S_ref** = 6  
+        - **B_ref** = 3  (tri‑blade)
+        """)
+
+        st.markdown("### Step 3 — Prop Load Index Formula")
+        st.latex(
+            r"PLI = \frac{P_{in}}{D_{in}}"
+            r"\cdot \frac{KV}{KV_{ref}}"
+            r"\cdot \frac{S}{S_{ref}}"
+            r"\cdot \frac{B}{B_{ref}}"
+        )
+
+        st.write("""
+        This is a dimensionless load number:
+        - more pitch → higher PLI  
+        - more KV → higher PLI  
+        - more cells → higher PLI  
+        - more blades → higher PLI  
+        """)
+
+        st.markdown("### Step 4 — How to Interpret PLI")
+        st.write("""
+        - **PLI ≤ 0.8** → Gentle / easy on pack & ESC  
+        - **0.8 < PLI ≤ 1.0** → Normal / sporty  
+        - **1.0 < PLI ≤ 1.15** → Hot / aggressive  
+        - **PLI > 1.15** → High overload risk (only on purpose)  
+        """)
+
+        st.markdown("### Example — 5\" on 6S, 1800KV, tri‑blade")
+        st.write("""
+        Here KV/KV_ref = 1, S/S_ref = 1, B/B_ref = 1, so PLI = Pᵢₙ / Dᵢₙ:
+
+        - 5×3.6×3 → PLI = 0.72 → Gentle  
+        - 5×4.3×3 → PLI = 0.86 → Normal  
+        - 5×5.1×3 → PLI = 1.02 → Hot  
+        - 5×5.5×3 → PLI = 1.10 → Upper hot, near limit  
+        """)
+
+        st.markdown("### Example — 3\" on 3S, 5500KV, 1303.5")
+        st.write("""
+        - 3×1.6×2 → PLI ≈ 0.54 → Very gentle / super safe  
+        - 3×1.8×3 → PLI ≈ 0.92 → Sporty / normal load  
+
+        Builders can use this to sanity‑check prop pitch and blade count choices
+        against their KV and cell count, before they buy props that are way too
+        heavy for their pack or ESC.
         """)
 
 
