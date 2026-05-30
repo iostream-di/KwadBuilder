@@ -802,6 +802,7 @@ def render_theory_section():
         **Barrel Roll** — Smooth, continuous roll while maintaining forward motion.  
         **Corkscrew** — Spiral descent or ascent around an object.  
         **Knife‑Edge** — Flying sideways with the quad banked at 90°.  
+        **Skimming / Mowing The Lawn** — Flying insanely close to the ground for a prolonged time.
         """)
 
         st.markdown("## Gap Tricks")
