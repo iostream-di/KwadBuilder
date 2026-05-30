@@ -246,21 +246,10 @@ def prop_power_from_thrust(
 
     power = p_i / fm
 
-        # Non-ideal losses (tip, inflow distortion, profile drag, etc.)
-    base_loss_factor = 1.40
+    # Non-ideal losses (tip, inflow distortion, profile drag, etc.)
+    # Stronger global loss factor to make high thrust realistically expensive
+    base_loss_factor = 1.60
     power *= base_loss_factor
-
-    # High disk loading penalty (only kicks in above hover)
-    if thrust_n > 0 and area > 0:
-        disk_loading = thrust_n / area  # N/m^2
-
-        # Start penalizing above ~220 N/m^2 (just above hover)
-        if disk_loading > 220:
-            excess = (disk_loading - 220) / 220
-            # Gentler curve and lower cap
-            high_load_factor = 1.0 + 0.20 * (excess ** 1.1)
-            power *= high_load_factor
-
 
     return power
 
