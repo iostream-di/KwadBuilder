@@ -117,6 +117,92 @@ def render_theory_section():
     - Aggressive flying increases power draw dramatically.
     """)
 
+    st.markdown("## Radio & RF Physics")
+
+    st.latex(r"FSPL(dB) = 20 \log_{10}(d) + 20 \log_{10}(f) + 32.44")
+    st.latex(r"LinkBudget = P_{tx} + G_{tx} + G_{rx} - FSPL - L_{misc}")
+    st.latex(r"Range \propto 10^{\frac{(LinkBudget)}{20}}")
+    st.latex(r"Loss_{pol} = 20 \log_{10}(\cos(\theta))")
+    st.latex(r"Loss_{CP/LP} \approx 3 \text{ dB}")
+    st.latex(r"FresnelRadius = \sqrt{\frac{\lambda d_1 d_2}{d_1 + d_2}}")
+
+    st.write(\"""
+    ### Free‑Space Path Loss (FSPL)
+    - FSPL increases with both **distance** and **frequency**.
+    - Higher frequency (5.8 GHz) loses range faster than lower frequency (2.4 GHz).
+    - Every **6 dB** of additional loss cuts your range in half.
+
+    ### Link Budget
+    - Determines maximum usable range.
+    - Includes:
+        - Transmit power (mW → dBm)
+        - Antenna gains (Tx + Rx)
+        - FSPL
+        - Misc losses (polarization, connectors, body blocking)
+    - Higher link budget = longer range.
+
+    ### Decibels (dB)
+    - **+3 dB = 2× power**
+    - **+6 dB = 4× power**
+    - **+10 dB = 10× power**
+    - **−20 dB = 1/10th power**
+    - Range scales with the **square root** of power.
+
+    ### Antenna Gain
+    - Higher gain antennas focus energy → more range but narrower beam.
+    - Omni antennas: 0–2 dBi
+    - Patch antennas: 6–14 dBi
+    - Helicals: 10–16 dBi
+
+    ### Polarization Loss
+    - Linear ↔ Linear misalignment:
+        - 0° = 0 dB loss
+        - 45° = −3 dB
+        - 90° = **−∞ dB** (no signal)
+    - Circular ↔ Linear mismatch ≈ **−3 dB**
+    - LHCP ↔ RHCP mismatch ≈ **−30 dB** (basically no signal)
+
+    ### Fresnel Zone
+    - RF energy travels in a **fat rugby‑ball shaped volume**, not a straight line.
+    - Obstructions inside the Fresnel zone cause:
+        - multipath
+        - fading
+        - sudden link drops
+    - Larger at lower frequencies (2.4 GHz > 5.8 GHz).
+
+    ### Multipath & Reflections
+    - Indoors or near metal structures:
+        - reflections cause constructive/destructive interference
+        - RSSI fluctuates rapidly
+        - desync risk increases
+    - Circular polarization helps reject reflections.
+
+    ### Practical FPV Rules of Thumb
+    - Every **3 dB** = ~1.4× range
+    - Every **6 dB** = ~2× range
+    - Every **20 dB** = ~10× range
+    - Body blocking = −10 to −20 dB
+    - Trees = −3 to −12 dB
+    - Buildings = −20 to −40 dB
+    - Wet foliage is RF death
+
+    ### Frequency Comparison
+    - **5.8 GHz**
+        - High bandwidth
+        - Short range
+        - Poor penetration
+        - Small antennas
+    - **2.4 GHz**
+        - Medium range
+        - Better penetration
+        - Good for control links
+    - **900 MHz**
+        - Longest range
+        - Best penetration
+        - Large antennas
+    \""")
+
+
     st.markdown("## Build Style Definitions")
 
     st.write("""
