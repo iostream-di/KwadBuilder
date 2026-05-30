@@ -252,7 +252,7 @@ def prop_power_from_thrust(
 
     # Non-ideal losses (tip, inflow distortion, profile drag, etc.)
     # 1.5 is a good middle ground: more realistic than 1.3, not as brutal as 1.75.
-    base_loss_factor = 1.50
+    base_loss_factor = 1.40
     power *= base_loss_factor
 
     return power
