@@ -281,7 +281,7 @@ def render_theory_section():
         ## **Practical Summary**
 
         | Band | Frequency | Range & Penetration | Antenna Size | Bandwidth | Typical Use |
-        |------|-----------|--------|--------------|----------------|------------|--------------|
+        |------|-----------|---------------------|----------------|------------|--------------|
         | 900 MHz | 0.9 GHz | Excellent | Large | Low | LR control |
         | 2.4 GHz | 2.4 GHz | Good | Medium | Medium | Control / FPV |
         | 5.8 GHz | 5.8 GHz | Short | Small | High | FPV video |
