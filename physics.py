@@ -206,26 +206,44 @@ def prop_power_from_thrust(
     """
     Diameter-aware induced + profile power estimate for a prop.
     Returns mechanical power in Watts.
-    Tuned for realistic hover power on 5-inch.
+
+    Tuned so that:
+    - 5" tri-blade on 6S, 1950 KV
+    - Gives realistic hover AND full-throttle current
+    for a typical 5" freestyle quad.
     """
     diameter_m = diameter_in * 0.0254
     area = math.pi * (diameter_m / 2.0) ** 2
 
+    # Ideal induced power
     p_i = induced_power(thrust_n, area, fuzz, rho)
 
+    # Base figure of merit vs diameter
     fm_base = _fm_for_diameter(diameter_in) if figure_of_merit is None else figure_of_merit
     fm = max(fm_base * fuzz.figure_of_merit_multiplier, 0.1)
 
     power = p_i / fm
 
-    # Stronger blade penalty so 3-blade props cost more power
-    blade_loss_factor = 1.0 + 0.05 * (blades - 2)
+    # Stronger blade penalty: tri-blades are noticeably more lossy
+    blade_loss_factor = 1.0 + 0.12 * (blades - 2)
     power *= blade_loss_factor
 
-    # Non-ideal losses (tip losses, inflow distortion, etc.)
-    power *= 1.30
+    # Non-ideal losses (tip, inflow distortion, high-Re drag, etc.)
+    # Was 1.30; that was too optimistic for 5" at high RPM.
+    base_loss_factor = 1.75
+    power *= base_loss_factor
+
+    # Mild extra penalty at very high disk loading (full throttle on small props)
+    # This keeps hover close to old behavior but punishes high thrust more.
+    if thrust_n > 0 and area > 0:
+        disk_loading = thrust_n / area  # N/m^2
+        # Normalize around a typical 5" hover loading (~120–150 N/m^2)
+        dl_norm = disk_loading / 150.0
+        high_load_factor = 1.0 + 0.20 * max(dl_norm - 1.0, 0.0)
+        power *= high_load_factor
 
     return power
+
 
 
 # ============================================================
