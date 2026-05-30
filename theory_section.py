@@ -475,6 +475,145 @@ def render_theory_section():
         | Ku‑Band | 12–18 GHz | Short | Very Small | Very High | SATCOM video/data |
         """)
 
+    with st.expander("PID Loops, Feed‑Forward & Tuning Diagnostics", expanded=False):
+
+        st.markdown("## PID Loops — What They Actually Do")
+
+        st.write("""
+        A PID loop is the flight controller’s core control system. It constantly compares:
+        - **what the quad is doing**, versus  
+        - **what your sticks are commanding**,  
+        and adjusts motor power to close the gap.
+
+        PID stands for **Proportional, Integral, Derivative**. Each term contributes a
+        different kind of correction and affects how the quad feels in the air.
+        """)
+
+        st.markdown("### P — Proportional (The Muscle)")
+        st.write("""
+        **P** reacts instantly to error.  
+        - More P = stronger, tighter, more locked‑in  
+        - Too much P = fast, high‑frequency oscillations  
+        - Too little P = mushy, drifty feel  
+
+        **Pilot feel:** P is the quad’s *strength*.
+        """)
+
+        st.markdown("### I — Integral (The Memory)")
+        st.write("""
+        **I** corrects long‑term, accumulated error.  
+        - Holds angle in wind  
+        - Prevents slow drifting  
+        - Too much I = slow wobbles, bounce‑back  
+        - Too little I = quad gets pushed around  
+
+        **Pilot feel:** I is the quad’s *stubbornness*.
+        """)
+
+        st.markdown("### D — Derivative (The Dampener)")
+        st.write("""
+        **D** predicts motion and damps it.  
+        - Smooths out P  
+        - Controls prop‑wash  
+        - Too much D = heat, twitchiness  
+        - Too little D = sloppy, lots of prop‑wash  
+
+        **Pilot feel:** D is the quad’s *smoothness*.
+        """)
+
+        st.markdown("## Feed‑Forward (FF) — The Stick Predictor")
+
+        st.write("""
+        Feed‑Forward reacts directly to **your stick inputs**, instead of waiting for the
+        PID loop to detect error. It makes the quad feel more connected and responsive.
+        """)
+
+        st.markdown("### What Feed‑Forward Does")
+        st.write("""
+        - Sharpens stick response  
+        - Reduces perceived latency  
+        - Helps maintain crispness even with heavy filtering  
+        - Reduces workload on P and D  
+        """)
+
+        st.markdown("### Too Much Feed‑Forward")
+        st.write("""
+        - Twitchy or robotic feel  
+        - Overshoots when stopping rotation  
+        - Harsh, unnatural transitions  
+        """)
+
+        st.markdown("### Too Little Feed‑Forward")
+        st.write("""
+        - Sluggish stick response  
+        - Feels like input delay  
+        - Quad lags behind your commands  
+        """)
+
+        st.markdown("### Pilot Feel Summary")
+        st.write("""
+        **Feed‑Forward is the quad’s 'stick sharpness' — it makes the quad follow your
+        fingers instead of waiting for the PID loop to catch up.**
+        """)
+
+        st.markdown("---")
+        st.markdown("## PID & FF Symptom → Root Cause Cheat Sheet")
+
+        st.write("""
+        This cheat sheet maps common flight symptoms to the most likely PID or Feed‑Forward
+        causes. It gives builders a fast way to diagnose tune issues without needing
+        blackbox logs.
+        """)
+
+        st.markdown("### Common Symptoms and Likely Causes")
+
+        st.write("""
+        **Fast, high‑frequency oscillations (buzzy)**  
+        - P too high  
+        - D too low  
+        - Filters too light  
+
+        **Slow wobbles or bounce‑back after flips**  
+        - I too high  
+        - D too low  
+        - P too low  
+
+        **Prop‑wash wobble on throttle chop**  
+        - D too low  
+        - Filters too heavy  
+        - P too low  
+
+        **Twitchy, robotic, over‑snappy response**  
+        - Feed‑Forward too high  
+        - D too high  
+
+        **Sluggish, delayed stick response**  
+        - Feed‑Forward too low  
+        - P too low  
+
+        **Motors getting hot quickly**  
+        - D too high  
+        - Filters too light  
+        - P too high  
+
+        **Quad won’t hold angle in wind**  
+        - I too low  
+
+        **Drifts or slowly wanders off‑axis**  
+        - I too low  
+        - Possible mechanical issue (loose arm, soft mount)  
+
+        **Overshoots when stopping rotation**  
+        - D too low  
+        - Feed‑Forward too high  
+        """)
+
+        st.write("""
+        These patterns hold across 2–7\" FPV quads and give builders a fast, intuitive way
+        to diagnose tune issues by feel.
+        """)
+
+
     with st.expander("Build Style Definitions", expanded=False):
         st.markdown("## Build Style Definitions")
 
