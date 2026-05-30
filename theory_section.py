@@ -785,14 +785,93 @@ def render_theory_section():
         **Tuning Gremlins** — Mysterious issues that disappear when you stop looking.  
         """)
 
-        st.markdown("## Pilot Skill & Flying Style Terms")
+    with st.expander("FPV Trick Names & Freestyle Maneuvers", expanded=False):
+        st.markdown("## Core Freestyle Tricks")
+
         st.write("""
-        **Flow** — Smooth, continuous freestyle movement.  
-        **Juicy** — Snappy, rhythmic freestyle with lots of reversals.  
-        **Matty Flip** — Backwards inverted dive around an object.  
-        **Powerloop** — Looping through a gap or around an object.  
-        **Dive** — Vertical drop down a building or structure.  
-        **Skimming** — Flying extremely close to the ground or surfaces.  
-        **Gap** — Any opening you try to fly through.  
-        **Micro Gap** — A stupidly small gap you shouldn’t try but will anyway.  
+        **Powerloop** — Looping over an object and exiting through the same gap.  
+        **Split‑S** — Half‑roll into a half‑loop to reverse direction quickly.  
+        **Immelmann** — Half‑loop into a half‑roll to gain altitude and reverse direction.  
+        **Matty Flip** — Backwards inverted dive around an object (invented by MattyStuntz).  
+        **Dive** — Vertical drop down a building, tower, or cliff.  
+        **Orbit** — Circling an object smoothly while keeping it centered in view.  
+        **Rewind** — Reversing a trick mid‑motion to retrace your path.  
+        **Juicy Flick** — Snappy stick reversal creating a sharp, rhythmic motion.  
+        **Juicy Roll** — Fast roll with immediate counter‑roll for a “whip” effect.  
+        **Snap Roll** — Extremely fast roll with high stick input.  
+        **Barrel Roll** — Smooth, continuous roll while maintaining forward motion.  
+        **Corkscrew** — Spiral descent or ascent around an object.  
+        **Knife‑Edge** — Flying sideways with the quad banked at 90°.  
         """)
+
+        st.markdown("## Gap Tricks")
+
+        st.write("""
+        **Gap Shot** — Flying through any opening (window, doorway, branches).  
+        **Micro Gap** — A stupidly small gap you shouldn’t try but will anyway.  
+        **Powerloop Gap** — Powerlooping through a gap on the return.  
+        **Inverted Gap** — Entering a gap upside‑down.  
+        **Side Gap** — Sliding sideways through a narrow opening.  
+        **Reverse Gap** — Entering a gap backwards.  
+        """)
+
+        st.markdown("## Advanced Freestyle Maneuvers")
+
+        st.write("""
+        **Wall Tap** — Lightly touching a wall or surface with a prop or arm.  
+        **Ground Tap / Grass Tap** — Skimming low enough to touch the ground.  
+        **Pole Tap** — Tapping a pole mid‑flight without crashing.  
+        **Ladder Climb** — Ascending through multiple stacked gaps.  
+        **Ladder Drop** — Descending through stacked gaps.  
+        **Rubik’s Cube** — Roll → flip → roll in rapid sequence.  
+        **Hurricane** — Tight, fast orbit with heavy tilt.  
+        **Inverted Yaw Spin** — Spinning on yaw while upside‑down.  
+        **Tornado** — Fast yaw spin while climbing or descending.  
+        **Trippy Spin** — Orbiting an object while yawing in the opposite direction.  
+        **Backward Dive** — Diving backwards while maintaining camera lock.  
+        **Backward Powerloop** — Powerloop performed in reverse orientation.  
+        """)
+
+        st.markdown("## Cinematic Maneuvers")
+
+        st.write("""
+        **Reveal Shot** — Rising or sliding to reveal a scene or subject.  
+        **Orbit Reveal** — Orbiting while revealing a subject from behind cover.  
+        **Slider** — Smooth lateral movement with minimal tilt.  
+        **Dolly Shot** — Forward/backward movement with stable horizon.  
+        **Fly‑Through** — Smooth entry through buildings, vehicles, or structures.  
+        **Cine‑Dive** — Slow, controlled dive for cinematic effect.  
+        """)
+
+        st.markdown("## Racing & Technical Maneuvers")
+
+        st.write("""
+        **Split‑S Gate** — Split‑S maneuver through a race gate.  
+        **Power Loop Gate** — Powerlooping a race gate.  
+        **Hairpin Turn** — Extremely tight 180° turn.  
+        **Slalom** — Rapid side‑to‑side movement through obstacles.  
+        **Chicane** — Quick left‑right or right‑left directional change.  
+        **Dive Gate** — Vertical drop through a gate.  
+        """)
+
+        st.markdown("## Micro‑Quad / Whoop‑Style Tricks")
+
+        st.write("""
+        **Wall Ride** — Riding along a wall at an angle.  
+        **Ceiling Kiss** — Lightly touching the ceiling with ducts.  
+        **Table Split** — Sliding under tables or furniture.  
+        **Vent Gap** — Flying through vents or tiny openings.  
+        **Hallway Surf** — Riding the air cushion in narrow hallways.  
+        """)
+
+        st.markdown("## Flow & Style Terms")
+
+        st.write("""
+        **Flow** — Smooth, continuous movement with intentional lines.  
+        **Juicy** — Snappy, rhythmic, high‑energy freestyle with reversals.  
+        **Technical** — Precision flying with tight gaps and complex lines.  
+        **Aggro** — Fast, hard, high‑throttle freestyle.  
+        **Cinematic** — Smooth, stable, visually pleasing movement.  
+        **Proximity** — Flying extremely close to surfaces or objects.  
+        """)
+
