@@ -81,7 +81,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("Voltage Sag (Hover)", f"{sag_pct * 100:.1f} %")
 
 
-    # ---------------------------------------------------------
+        # ---------------------------------------------------------
     # Flight Time Breakdown (physics-derived)
     # ---------------------------------------------------------
 
@@ -113,7 +113,6 @@ def render_metrics(cfg, kwad, perf, fuzz):
         freestyle_current = 0.5 * (hover_current + racing_current)
         freestyle_power = freestyle_current * v_nom if v_nom > 0 else 0.0
 
-        # Racing: derived above
         # Full throttle: from engine
         full_current = ft_current
         full_power = ft_power
@@ -160,9 +159,9 @@ def render_metrics(cfg, kwad, perf, fuzz):
     # FC Stress (realistic CPU model, scaled by racing load)
     # ---------------------------------------------------------
 
-    loop_factor = cfg["fc_loop"] / 4000.0          # 1k = 0.25, 4k = 1.0
-    dshot_factor = cfg["fc_dshot"] / 1200.0        # 600 = 0.5
-    noise_factor = cfg["frame_noise"] / 50.0       # noisy frames = more filtering
+    loop_factor = cfg["fc_loop"] / 4000.0
+    dshot_factor = cfg["fc_dshot"] / 1200.0
+    noise_factor = cfg["frame_noise"] / 50.0
     motor_factor = motor_count / 4.0 if motor_count > 0 else 0.0
 
     fc_stress = (
@@ -172,7 +171,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
         motor_factor * 0.20
     )
 
-    # Slightly increase FC stress under heavy racing load
+    # Increase FC stress under heavy racing load
     if hover_current > 0:
         load_factor = min(racing_current / hover_current, 3.0)
         fc_stress *= (0.8 + 0.2 * load_factor)
@@ -213,7 +212,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     desync_stress = racing_current_per_motor / motor_rating_eff if motor_rating_eff > 0 else 0.0
     desync_stress *= kv_factor * prop_factor
     desync_stress *= demag_factor * timing_desync_factor
-    desync_stress *= (1.0 + sag_race_pct * 2.0)  # sag increases desync risk
+    desync_stress *= (1.0 + sag_race_pct * 2.0)
     desync_stress = clamp01(desync_stress)
 
     # ---------------------------------------------------------
@@ -224,11 +223,8 @@ def render_metrics(cfg, kwad, perf, fuzz):
     safe_current_real = safe_current_theoretical * 0.5  # derate C-rating to realistic value
 
     batt_stress = racing_current / safe_current_real if safe_current_real > 0 else 0.0
-
-    # IR + sag penalty
     batt_stress *= (1.0 + sag_race_pct * 2.0)
 
-    # battery health penalty
     health_factor = 100.0 / max(cfg["lipo_health"], 1.0)
     batt_stress *= health_factor
 
