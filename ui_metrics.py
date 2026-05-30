@@ -186,8 +186,9 @@ def render_metrics(cfg, kwad, perf, fuzz):
     pwm_factor = min(cfg["esc_pwm"] / 48000, 1.2)
 
     esc_rating_eff = kwad.esc.continuous_current_a * 0.8  # derate to realistic continuous
-    esc_stress = racing_current_per_motor / esc_rating_eff if esc_rating_eff > 0 else 0.0
+    esc_stress = clamp01((racing_current_per_motor / esc_rating_eff) ** 1.25)
     esc_stress *= timing_factor * pwm_factor
+
     esc_stress = clamp01(esc_stress)
 
     # ---------------------------------------------------------
@@ -198,7 +199,8 @@ def render_metrics(cfg, kwad, perf, fuzz):
     prop_factor = (cfg["prop_diameter"] / 5.1) * (cfg["prop_pitch"] / 4.3)
 
     motor_rating_eff = kwad.motors[0].max_current_a * 0.8 if motor_count > 0 else 1.0
-    motor_stress = racing_current_per_motor / motor_rating_eff if motor_rating_eff > 0 else 0.0
+    ratio = racing_current_per_motor / motor_rating_eff
+    motor_stress = clamp01((ratio ** 1.35) * kv_factor * prop_factor)
     motor_stress *= kv_factor * prop_factor
     motor_stress = clamp01(motor_stress)
 
@@ -223,7 +225,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     safe_current_real = safe_current_theoretical * 0.5  # derate C-rating to realistic value
 
     batt_stress = racing_current / safe_current_real if safe_current_real > 0 else 0.0
-    batt_stress *= (1.0 + sag_race_pct * 2.0)
+    batt_stress *= (1.0 + sag_race_pct * 1.0)
 
     health_factor = 100.0 / max(cfg["lipo_health"], 1.0)
     batt_stress *= health_factor
