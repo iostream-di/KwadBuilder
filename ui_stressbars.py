@@ -161,18 +161,27 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
     batt_stress = clamp01(batt_stress)
 
     # =========================================================
-    # OVERALL STRESS (ignore Desync unless highest)
+    # OVERALL STRESS (logarithmic ramp of collective stressors)
     # =========================================================
 
-    base_list = [fc_stress, esc_stress, motor_stress, batt_stress]
-    base_overall = sorted(base_list)[-2]  # 2nd highest
+    # Base stressors (exclude desync for now)
+    base_stressors = [fc_stress, esc_stress, motor_stress, batt_stress]
 
-    if desync_stress > base_overall:
+    # Sum of stressors
+    s = sum(base_stressors)
+
+    # Logarithmic ramp
+    # k = 1.8 gives a good FPV-feeling danger curve
+    log_ramp = clamp01( (math.log(1 + 1.8 * s)) / math.log(1 + 1.8 * 4) )
+
+    # Apply desync override rule
+    if desync_stress > log_ramp:
         overall_stress = desync_stress
     else:
-        overall_stress = base_overall
+        overall_stress = log_ramp
 
     overall_stress = clamp01(overall_stress)
+
 
     # =========================================================
     # RENDER
