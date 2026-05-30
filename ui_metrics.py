@@ -140,9 +140,10 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("High Current", f"{high_current:.1f} A")
         st.metric("Max Current", f"{max_current:.1f} A")
         st.metric("Voltage Sag (Hover)", f"{sag_pct * 100:.1f} %")
-        st.metric("Flight Time (Freestyle)", f"{flight_time_freestyle:.1f} min")
         st.metric("Battery Warning Voltage", f"{v_warn:.2f} V")
         st.metric("Battery Land Voltage", f"{v_land:.2f} V")
+
+
 
     # ---------------------------------------------------------
     # Flight Time Breakdown
