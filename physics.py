@@ -103,7 +103,7 @@ def _ct_base_for_diameter(diameter_in: float) -> float:
     slightly lower for very large props.
     """
     d = _clamp_diameter_in(diameter_in)
-    base_ct_5 = 0.14
+    base_ct_5 = 0.10
     scale = (d / 5.0) ** -0.15
     return base_ct_5 * scale
 
