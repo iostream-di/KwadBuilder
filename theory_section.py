@@ -280,15 +280,15 @@ def render_theory_section():
 
         ## **Practical Summary**
 
-        | Band | Frequency | Range | Penetration | Antenna Size | Bandwidth | Typical Use |
+        | Band | Frequency | Range & Penetration | Antenna Size | Bandwidth | Typical Use |
         |------|-----------|--------|--------------|----------------|------------|--------------|
-        | 900 MHz | 0.9 GHz | Excellent | Excellent | Large | Low | LR control |
-        | 2.4 GHz | 2.4 GHz | Good | Good | Medium | Medium | Control / FPV |
-        | 5.8 GHz | 5.8 GHz | Short | Poor | Small | High | FPV video |
-        | L‑Band | 1–2 GHz | Excellent | Excellent | Medium‑Large | Low‑Med | C2 / Telemetry |
-        | S‑Band | 2–4 GHz | Good | Good | Medium | Medium | C2 / Video |
-        | C‑Band | 4–8 GHz | Medium | Fair | Small | High | Video downlink |
-        | Ku‑Band | 12–18 GHz | Short | Very Poor | Very Small | Very High | SATCOM video/data |
+        | 900 MHz | 0.9 GHz | Excellent | Large | Low | LR control |
+        | 2.4 GHz | 2.4 GHz | Good | Medium | Medium | Control / FPV |
+        | 5.8 GHz | 5.8 GHz | Short | Small | High | FPV video |
+        | L‑Band | 1–2 GHz | Excellent | Medium‑Large | Low‑Med | C2 / Telemetry |
+        | S‑Band | 2–4 GHz | Good | Medium | Medium | C2 / Video |
+        | C‑Band | 4–8 GHz | Medium | Small | High | Video downlink |
+        | Ku‑Band | 12–18 GHz | Short | Very Small | Very High | SATCOM video/data |
         """)
 
     with st.expander("Build Style Definitions", expanded=False):
