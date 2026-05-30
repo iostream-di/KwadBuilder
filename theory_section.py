@@ -3,7 +3,7 @@ import streamlit as st
 def render_theory_section():
 
     with st.expander("Marty Mayhem's Build Logic", expanded=False):
-        st.markdown("## Marty Mayhem's Build Logic — Motor KV Formula")
+        st.markdown("## Marty's Motor KV Formula")
 
         st.write("""
         This formula gives you the correct motor KV for **any prop size** and **any cell count**
