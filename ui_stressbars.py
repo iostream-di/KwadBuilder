@@ -13,9 +13,9 @@ def heat_bar(label, value):
       <div style="font-weight:600; margin-bottom:2px;">{label}</div>
       <div style="width: 100%; height: 22px; border-radius: 11px;
            background: linear-gradient(90deg, #7FDBFF 0%, #FFD700 50%, #FF4136 100%);
-           position: relative; color: inherit;">
+           position: relative; color: var(--text-color);">
         <div style="position: absolute; top: -4px; left: calc({pos}% - 5px);
-                    width: 10px; height: 30px; background: inherit; border-radius: 5px;">
+                    width: 10px; height: 30px; background: var(--text-color); border-radius: 5px;">
         </div>
       </div>
       <div style="margin-top:2px; font-size:0.85rem;">{pct}%</div>
