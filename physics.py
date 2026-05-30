@@ -252,7 +252,7 @@ def prop_power_from_thrust(
     power += p_profile
 
     # Global non-ideal losses (back off a bit)
-    base_loss_factor = 1.55
+    base_loss_factor = 1.65
     power *= base_loss_factor
 
     return power
