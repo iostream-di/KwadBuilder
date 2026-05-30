@@ -118,6 +118,27 @@ def render_metrics(cfg, kwad, perf, fuzz):
     max_accel_g = (perf.max_thrust_total_n - weight_n) / (auw_kg * phys.GRAVITY) if auw_kg > 0 else 0.0
 
     # ---------------------------------------------------------
+    # Capacitor Recommendation
+    # ---------------------------------------------------------
+
+    # Base capacitance from full-throttle current
+    base_cap_uf = 200 * (ft_current / 50.0)
+
+    # Scale by full-throttle sag severity
+    cap_required_uf = base_cap_uf * (1.0 + 2.0 * sag_ft_pct)
+
+    # Clamp to realistic FPV ranges
+    cap_required_uf = max(100, min(cap_required_uf, 2200))
+
+    # Voltage rating (25% margin above full voltage)
+    cap_voltage_required = v_full * 1.25
+
+    # Round voltage rating to nearest standard value
+    standard_voltages = [16, 25, 35, 50, 63]
+    cap_voltage_rating = next((v for v in standard_voltages if v >= cap_voltage_required), 63)
+
+
+    # ---------------------------------------------------------
     # Render Metrics
     # ---------------------------------------------------------
 
@@ -142,6 +163,8 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("Voltage Sag (Hover)", f"{sag_pct * 100:.1f} %")
         st.metric("Battery Warning Voltage", f"{v_warn:.2f} V")
         st.metric("Battery Land Voltage", f"{v_land:.2f} V")
+        st.metric("Capacitor Required", f"{cap_required_uf:.0f} µF @ {cap_voltage_rating} V")
+
 
 
 
