@@ -66,7 +66,6 @@ def static_thrust(motor: Motor, prop: Propeller, voltage_v: float, fuzz: phys.Fu
     Static max thrust per motor using the diameter-aware prop model.
     """
     rpm = phys.throttle_to_rpm(1.0, motor.kv_rpm_per_v, voltage_v)
-    # Guard against absurd KV/voltage combos (tiny whoops, bad presets, etc.)
     rpm = min(rpm, 120_000.0)
 
     diameter_in = prop.diameter_in
@@ -158,36 +157,45 @@ def hover_mech_power_total_w(kwad: Kwad, thrust_per_motor_n: float, fuzz: phys.F
 
 
 # ============================================================
-# Motor Current from Thrust
+# Motor Current from Thrust (mech → elec)
 # ============================================================
 
 def motor_current_from_thrust(
     motor: Motor,
     prop: Propeller,
-    rpm: float,
     thrust_n: float,
+    voltage_v: float,
     fuzz: phys.Fuzz,
 ) -> float:
     """
-    Convert thrust → prop mechanical power → torque → motor current using motor physics.
+    Convert thrust → prop mechanical power → electrical power → motor current.
+    Uses motor efficiency instead of assuming ideal torque conversion.
     """
-    omega = (rpm * 2.0 * math.pi) / 60.0  # rad/s
-
     diameter_in = prop.diameter_in
     blades = getattr(prop, "blades", 2)
 
-    p_out = phys.prop_power_from_thrust(
+    # Mechanical power at the prop
+    p_mech = phys.prop_power_from_thrust(
         thrust_n=thrust_n,
         diameter_in=diameter_in,
         blades=blades,
         fuzz=fuzz,
     )
 
-    torque = p_out / max(omega, 1e-6)
+    # Motor efficiency (use motor_physics if present, otherwise a sane default)
+    if motor.motor_physics is not None:
+        eff_base = motor.motor_physics.efficiency
+    else:
+        eff_base = 0.85
 
-    kt = phys.motor_torque_constant(motor.kv_rpm_per_v, fuzz)
+    eff = eff_base * fuzz.motor_efficiency_multiplier
+    eff = max(0.3, min(0.98, eff))
 
-    current = torque / max(kt, 1e-9) + motor.no_load_current_a
+    # Electrical power per motor
+    p_elec = p_mech / max(eff, 1e-6)
+
+    # Current from electrical power
+    current = p_elec / max(voltage_v, 1e-3)
     return max(current, 0.0)
 
 
@@ -272,14 +280,12 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
     current_per_motor = 0.0
 
     for _ in range(8):
-        rpm_hover = phys.throttle_to_rpm(h_throttle, motor.kv_rpm_per_v, v_loaded)
-        rpm_hover = min(rpm_hover, 120_000.0)
-
+        # Current per motor from mech→elec power at this voltage
         current_per_motor = motor_current_from_thrust(
             motor,
             prop,
-            rpm_hover,
             thrust_per_motor,
+            v_loaded,
             fuzz,
         )
         hover_current = current_per_motor * motor_count
