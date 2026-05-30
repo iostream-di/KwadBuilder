@@ -153,6 +153,10 @@ def static_thrust_simple(
     Behaves correctly for whoops, 5-inch, and larger props.
     """
 
+    # Absolute numerical safety clamp.
+    # No real motor/prop combo will ever see 200k rpm under load.
+    rpm = max(0.0, min(rpm, 200_000.0))
+
     diameter_m = diameter_in * 0.0254
     pitch_m = pitch_in * 0.0254
     n = rpm / 60.0
@@ -168,6 +172,7 @@ def static_thrust_simple(
 
     thrust_n = ct * rho * (n ** 2) * (diameter_m ** 4)
     return thrust_n
+
 
 
 def induced_power(thrust_n: float, disk_area_m2: float, fuzz: Fuzz,
