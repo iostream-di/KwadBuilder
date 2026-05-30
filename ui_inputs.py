@@ -77,11 +77,6 @@ DEFAULT_5IN = {
 }
 
 
-DEFAULT_WHOOP = {
-    # (same as before)
-}
-
-
 # ---------------------------------------------------------
 # Helper: Slider + Buttons
 # ---------------------------------------------------------
@@ -132,17 +127,6 @@ def render_inputs():
 
     cfg = st.session_state.config
 
-    # Presets
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("Load 5\" Freestyle Defaults"):
-            st.session_state.config = DEFAULT_5IN.copy()
-            st.experimental_rerun()
-
-    with colB:
-        if st.button("Load 65mm Tiny Whoop Defaults"):
-            st.session_state.config = DEFAULT_WHOOP.copy()
-            st.experimental_rerun()
 
     # Propeller
     with st.expander("Propeller", expanded=False):
