@@ -243,21 +243,29 @@ def prop_power_from_thrust(
     # Base figure of merit vs diameter
     fm_base = _fm_for_diameter(diameter_in) if figure_of_merit is None else figure_of_merit
     fm = max(fm_base * fuzz.figure_of_merit_multiplier, 0.1)
+
     # FM dropoff at high thrust (5" props lose efficiency fast)
     # Typical hover FM ~0.18, full-throttle FM ~0.10
     thrust_ratio = thrust_n / (thrust_n + 15.0)  # smooth 0→1 curve
     fm_drop = 1.0 - 0.45 * (thrust_ratio ** 1.3)  # up to ~45% FM loss
     fm *= fm_drop
 
-
+    # Induced power corrected by FM
     power = p_i / fm
 
-    # Non-ideal losses (tip, inflow distortion, profile drag, etc.)
-    # Stronger global loss factor to make high thrust realistically expensive
+    # --- Profile drag power term ---
+    # Profile drag grows ~quadratically with RPM, which scales with thrust^(1/3)
+    # This term is small at hover and large at full throttle.
+    k_profile = 0.18  # tuned for 5" tri-blades
+    p_profile = k_profile * (thrust_n ** (2/3)) * diameter_in
+    power += p_profile
+
+    # Global non-ideal losses
     base_loss_factor = 1.60
     power *= base_loss_factor
 
     return power
+
 
 
 
