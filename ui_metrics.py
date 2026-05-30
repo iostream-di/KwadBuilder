@@ -163,7 +163,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("Voltage Sag (Hover)", f"{sag_pct * 100:.1f} %")
         st.metric("Battery Warning Voltage", f"{v_warn:.2f} V")
         st.metric("Battery Land Voltage", f"{v_land:.2f} V")
-        st.metric("Capacitor Required", f"{cap_required_uf:.0f} µF @ {cap_voltage_rating} V / Low ESR")
+        st.metric("Capacitor Required (Low ESR)", f"{cap_required_uf:.0f} µF @ {cap_voltage_rating} V")
 
 
 
