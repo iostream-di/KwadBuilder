@@ -104,10 +104,6 @@ def render_metrics(cfg, kwad, perf, fuzz):
     # Expanded Performance Metrics
     # ---------------------------------------------------------
 
-    # Max Speed (MPH)
-    rpm_loaded = kwad.motors[0].kv_rpm_per_v * v_sag_ft * 0.9
-    max_speed_mph = cfg["prop_pitch"] * rpm_loaded * 0.000947
-
     # High Power & High Current (Racing)
     high_current = racing_current
     high_power = high_current * v_nom
@@ -121,6 +117,10 @@ def render_metrics(cfg, kwad, perf, fuzz):
     # Max Voltage Sag (Full Throttle)
     v_sag_ft = phys.voltage_sag_under_load(v_full, ft_current, r_pack)
     sag_ft_pct = (v_full - v_sag_ft) / v_full if v_full > 0 else 0.0
+
+    # Max Speed (MPH)
+    rpm_loaded = kwad.motors[0].kv_rpm_per_v * v_sag_ft * 0.9
+    max_speed_mph = cfg["prop_pitch"] * rpm_loaded * 0.000947
 
     # Flight Time (Freestyle)
     flight_time_freestyle = phys.ideal_flight_time_minutes(energy_wh, freestyle_power) if freestyle_power > 0 else 0.0
