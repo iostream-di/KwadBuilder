@@ -1,5 +1,3 @@
-# ui_metrics.py
-
 import streamlit as st
 import physics as phys
 import engine
@@ -45,31 +43,49 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
     st.subheader("Performance Metrics")
 
-    # AUW
-    payload_g = cfg.get("payload", 0.0)  # default 0 if not set
-    auw_kg = engine.auw_kg(kwad) + (payload_g / 1000.0)
+    # ---------------------------------------------------------
+    # AUW + Dry Weight (now handled cleanly in engine.py)
+    # ---------------------------------------------------------
+
+    auw_kg = engine.auw_kg(kwad)
     auw_g = auw_kg * 1000.0
 
+    dry_weight_g = engine.dry_weight_kg(kwad) * 1000.0
+
+    payload_g = kwad.payload.weight_g
+
+    # ---------------------------------------------------------
     # Max thrust
+    # ---------------------------------------------------------
+
     max_thrust_g = perf.max_thrust_total_n / phys.GRAVITY * 1000.0
 
+    # ---------------------------------------------------------
     # TWR
+    # ---------------------------------------------------------
+
     weight_n = auw_kg * phys.GRAVITY
     twr = perf.max_thrust_total_n / weight_n if weight_n > 0 else 0.0
 
+    # ---------------------------------------------------------
     # Hover power & current
+    # ---------------------------------------------------------
+
     v_nom = phys.pack_voltage_nominal(kwad.battery.cells_series, kwad.battery.chemistry)
     hover_power = perf.total_power_hover_w
     hover_current = hover_power / v_nom if v_nom > 0 else 0.0
 
+    # ---------------------------------------------------------
     # Voltage sag (hover)
+    # ---------------------------------------------------------
+
     v_full = phys.pack_voltage_full(kwad.battery.cells_series, kwad.battery.chemistry)
     r_pack = phys.pack_internal_resistance(kwad.battery.cells_series, kwad.battery.chemistry, fuzz)
     v_sag = phys.voltage_sag_under_load(v_full, hover_current, r_pack)
     sag_pct = (v_full - v_sag) / v_full if v_full > 0 else 0.0
 
     # ---------------------------------------------------------
-    # Full throttle & profiles (MUST be defined early)
+    # Full throttle & profiles
     # ---------------------------------------------------------
 
     ft_current = perf.full_throttle_current_a
@@ -122,32 +138,22 @@ def render_metrics(cfg, kwad, perf, fuzz):
     # Capacitor Recommendation
     # ---------------------------------------------------------
 
-    # Base capacitance from full-throttle current
     base_cap_uf = 200 * (ft_current / 50.0)
-
-    # Scale by full-throttle sag severity
     cap_required_uf = base_cap_uf * (1.0 + 2.0 * sag_ft_pct)
-
-    # Clamp to realistic FPV ranges
     cap_required_uf = max(100, min(cap_required_uf, 2200))
 
-    # Voltage rating (25% margin above full voltage)
     cap_voltage_required = v_full * 1.25
-
-    # Round voltage rating to nearest standard value
     standard_voltages = [16, 25, 35, 50, 63]
     cap_voltage_rating = next((v for v in standard_voltages if v >= cap_voltage_required), 63)
 
-    # Dry Weight
-    dry_weight_g = (engine.auw_kg(kwad) * 1000.0) - kwad.battery.weight_g
+    # ---------------------------------------------------------
+    # Max Prop Load & Max RPM
+    # ---------------------------------------------------------
 
-    # Max Prop Load (per motor)
     motor_count = len(kwad.motors)
     max_prop_load_g = max_thrust_g / motor_count if motor_count > 0 else 0.0
 
-    # Max RPM
     max_rpm = kwad.motors[0].kv_rpm_per_v * v_full * 0.9
-
 
     # ---------------------------------------------------------
     # Render Metrics
@@ -157,8 +163,9 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
     with col1:
         st.metric("Dry Weight", f"{dry_weight_g:.0f} g")
-        st.metric("Max Payload", f"{max_payload_g:.0f} g")
+        st.metric("Payload", f"{payload_g:.0f} g")
         st.metric("AUW", f"{auw_g:.0f} g")
+        st.metric("Max Payload", f"{max_payload_g:.0f} g")
         st.metric("Max Thrust", f"{max_thrust_g:.0f} g")
         st.metric("Max RPM", f"{max_rpm:.0f} RPM")
         st.metric("Max Acceleration", f"{max_accel_g:.2f} G")
@@ -166,7 +173,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("TWR", f"{twr:.2f} : 1")
         st.metric("Hover Throttle", f"{perf.hover_throttle:.2f}")
         st.metric("Max Prop Load", f"{max_prop_load_g:.0f} g/motor")
-        
+
     with col2:
         st.metric("Hover Power", f"{hover_power:.0f} W")
         st.metric("High Power", f"{high_power:.0f} W")
@@ -179,9 +186,6 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("Battery Land Voltage", f"{v_land:.2f} V")
         st.metric("Capacitor Required (Low ESR)", f"{cap_required_uf:.0f} µF @ {cap_voltage_rating} V")
 
-
-
-
     # ---------------------------------------------------------
     # Flight Time Breakdown
     # ---------------------------------------------------------
@@ -192,17 +196,11 @@ def render_metrics(cfg, kwad, perf, fuzz):
         rows_current = []
         rows_time = []
 
-        # Loitering
         loiter_current = hover_current * 0.6
         loiter_power = loiter_current * v_nom if v_nom > 0 else 0.0
 
-        # Cruise
         cruise_current = hover_current
         cruise_power = hover_power
-
-        # Freestyle (already computed)
-        # Racing (already computed)
-        # Full throttle (already computed)
 
         modes = [
             ("Loitering", loiter_current, loiter_power),

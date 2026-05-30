@@ -3,7 +3,7 @@
 import physics as phys
 from basekwad import (
     Frame, Motor, Propeller, Battery, ESC, FlightController,
-    VTX, Camera, Receiver, ActionCam, Kwad
+    VTX, Camera, Receiver, ActionCam, Payload, Kwad
 )
 
 
@@ -124,6 +124,14 @@ def build_kwad_and_fuzz(cfg):
         )
 
     # ---------------------------------------------------------
+    # Payload
+    # ---------------------------------------------------------
+    payload = Payload(
+        name="Payload",
+        weight_g=cfg.get("payload", 0.0)
+    )
+
+    # ---------------------------------------------------------
     # Build Kwad
     # ---------------------------------------------------------
     kwad = Kwad(
@@ -138,6 +146,7 @@ def build_kwad_and_fuzz(cfg):
         receiver=receiver,
         battery=battery,
         action_cam=action_cam,
+        payload=payload,
     )
 
     # ---------------------------------------------------------

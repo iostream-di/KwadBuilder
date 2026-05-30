@@ -18,8 +18,7 @@ from basekwad import (
 # ============================================================
 # AUW Calculation
 # ============================================================
-
-def auw_kg(kwad: Kwad) -> float:
+def dry_weight_kg(kwad: Kwad) -> float:
     total_g = (
         kwad.frame.dry_weight_g
         + kwad.esc.weight_g
@@ -27,7 +26,6 @@ def auw_kg(kwad: Kwad) -> float:
         + kwad.vtx.weight_g
         + kwad.camera.weight_g
         + kwad.receiver.weight_g
-        + kwad.battery.weight_g
     )
 
     if kwad.action_cam:
@@ -41,6 +39,17 @@ def auw_kg(kwad: Kwad) -> float:
             total_g += p.weight_g
 
     return total_g / 1000.0
+
+
+
+def auw_kg(kwad: Kwad) -> float:
+    base = dry_weight_kg(kwad) * 1000.0  # convert back to grams
+
+    base += kwad.battery.weight_g
+    base += kwad.payload.weight_g
+
+    return base / 1000.0
+
 
 
 # ============================================================
