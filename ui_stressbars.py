@@ -1,6 +1,7 @@
 import streamlit as st
 from physics import voltage_sag_under_load, GRAVITY
 from math import sqrt
+import math
 
 def clamp01(x):
     return max(0.0, min(1.0, x))
