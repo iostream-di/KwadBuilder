@@ -60,7 +60,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     hover_power = perf.total_power_hover_w
     hover_current = hover_power / v_nom if v_nom > 0 else 0.0
 
-    # Voltage sag
+    # Voltage sag (hover)
     v_full = phys.pack_voltage_full(kwad.battery.cells_series, kwad.battery.chemistry)
     r_pack = phys.pack_internal_resistance(kwad.battery.cells_series, kwad.battery.chemistry, fuzz)
     v_sag = phys.voltage_sag_under_load(v_full, hover_current, r_pack)
@@ -82,18 +82,10 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
 
     # ---------------------------------------------------------
-    # Flight Time Breakdown
+    # Flight Time Breakdown (physics-derived)
     # ---------------------------------------------------------
 
     with st.expander("Flight Time Breakdown", expanded=False):
-
-        profiles = {
-            "Loitering": 0.6,
-            "Cruise": 1.0,
-            "Freestyle": 1.5,
-            "Racing": 2.0,
-            "Full Throttle": 2.5,
-        }
 
         rows_mode = []
         rows_current = []
@@ -101,11 +93,41 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
         energy_wh = phys.energy_wh_from_capacity(kwad.battery.capacity_mah, v_nom)
 
-        for mode, factor in profiles.items():
-            p_mode = hover_power * factor
-            i_mode = p_mode / v_nom if v_nom > 0 else 0.0
-            t_min = phys.ideal_flight_time_minutes(energy_wh, p_mode) if p_mode > 0 else 0.0
+        # Real full-throttle from engine
+        ft_current = perf.full_throttle_current_a
+        ft_power = perf.full_throttle_power_w
 
+        # Derive a realistic racing current (~75% of full throttle)
+        racing_current = ft_current * 0.75
+        racing_power = racing_current * v_nom if v_nom > 0 else 0.0
+
+        # Loitering: light load below hover
+        loiter_current = hover_current * 0.6
+        loiter_power = loiter_current * v_nom if v_nom > 0 else 0.0
+
+        # Cruise: hover
+        cruise_current = hover_current
+        cruise_power = hover_power
+
+        # Freestyle: mid between hover and racing
+        freestyle_current = 0.5 * (hover_current + racing_current)
+        freestyle_power = freestyle_current * v_nom if v_nom > 0 else 0.0
+
+        # Racing: derived above
+        # Full throttle: from engine
+        full_current = ft_current
+        full_power = ft_power
+
+        modes = [
+            ("Loitering", loiter_current, loiter_power),
+            ("Cruise", cruise_current, cruise_power),
+            ("Freestyle", freestyle_current, freestyle_power),
+            ("Racing", racing_current, racing_power),
+            ("Full Throttle", full_current, full_power),
+        ]
+
+        for mode, i_mode, p_mode in modes:
+            t_min = phys.ideal_flight_time_minutes(energy_wh, p_mode) if p_mode > 0 else 0.0
             rows_mode.append(mode)
             rows_current.append(f"{i_mode:.1f} A")
             rows_time.append(f"{t_min:.1f} min")
@@ -118,28 +140,30 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
 
     # ---------------------------------------------------------
-    # Stress Bars (Racing Profile)
+    # Stress Bars (Racing Profile, physics-based)
     # ---------------------------------------------------------
 
     st.subheader("Thermal & Reliability Stress")
 
-    # Racing profile = 2.0 × hover power
-    racing_power = hover_power * 2.0
-    racing_current = racing_power / v_nom if v_nom > 0 else 0.0
-    racing_current_per_motor = racing_current / len(kwad.motors) if kwad.motors else 0.0
+    motor_count = len(kwad.motors) if kwad.motors else 0
+
+    # Racing profile: 75% of full-throttle current
+    ft_current = perf.full_throttle_current_a
+    racing_current = ft_current * 0.75
+    racing_current_per_motor = racing_current / motor_count if motor_count > 0 else 0.0
 
     # Battery sag at racing load
     v_sag_race = phys.voltage_sag_under_load(v_full, racing_current, r_pack)
     sag_race_pct = (v_full - v_sag_race) / v_full if v_full > 0 else 0.0
 
     # ---------------------------------------------------------
-    # FC Stress (realistic CPU model)
+    # FC Stress (realistic CPU model, scaled by racing load)
     # ---------------------------------------------------------
 
     loop_factor = cfg["fc_loop"] / 4000.0          # 1k = 0.25, 4k = 1.0
     dshot_factor = cfg["fc_dshot"] / 1200.0        # 600 = 0.5
     noise_factor = cfg["frame_noise"] / 50.0       # noisy frames = more filtering
-    motor_factor = len(kwad.motors) / 4.0          # hex/octo scale
+    motor_factor = motor_count / 4.0 if motor_count > 0 else 0.0
 
     fc_stress = (
         loop_factor * 0.40 +
@@ -147,6 +171,12 @@ def render_metrics(cfg, kwad, perf, fuzz):
         noise_factor * 0.20 +
         motor_factor * 0.20
     )
+
+    # Slightly increase FC stress under heavy racing load
+    if hover_current > 0:
+        load_factor = min(racing_current / hover_current, 3.0)
+        fc_stress *= (0.8 + 0.2 * load_factor)
+
     fc_stress = clamp01(fc_stress)
 
     # ---------------------------------------------------------
@@ -156,7 +186,8 @@ def render_metrics(cfg, kwad, perf, fuzz):
     timing_factor = {"low": 0.9, "med": 1.0, "high": 1.1}[cfg["esc_timing"]]
     pwm_factor = min(cfg["esc_pwm"] / 48000, 1.2)
 
-    esc_stress = racing_current_per_motor / kwad.esc.continuous_current_a
+    esc_rating_eff = kwad.esc.continuous_current_a * 0.8  # derate to realistic continuous
+    esc_stress = racing_current_per_motor / esc_rating_eff if esc_rating_eff > 0 else 0.0
     esc_stress *= timing_factor * pwm_factor
     esc_stress = clamp01(esc_stress)
 
@@ -164,10 +195,11 @@ def render_metrics(cfg, kwad, perf, fuzz):
     # Motor Stress (battery + ESC + motor limits + props @ racing)
     # ---------------------------------------------------------
 
-    kv_factor = kwad.motors[0].kv_rpm_per_v / 1950.0
+    kv_factor = kwad.motors[0].kv_rpm_per_v / 1950.0 if motor_count > 0 else 1.0
     prop_factor = (cfg["prop_diameter"] / 5.1) * (cfg["prop_pitch"] / 4.3)
 
-    motor_stress = racing_current_per_motor / kwad.motors[0].max_current_a
+    motor_rating_eff = kwad.motors[0].max_current_a * 0.8 if motor_count > 0 else 1.0
+    motor_stress = racing_current_per_motor / motor_rating_eff if motor_rating_eff > 0 else 0.0
     motor_stress *= kv_factor * prop_factor
     motor_stress = clamp01(motor_stress)
 
@@ -178,7 +210,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     demag_factor = {"high": 0.7, "med": 1.0, "low": 1.3}[cfg["esc_demag"]]
     timing_desync_factor = {"low": 1.2, "med": 1.0, "high": 0.8}[cfg["esc_timing"]]
 
-    desync_stress = racing_current_per_motor / kwad.motors[0].max_current_a
+    desync_stress = racing_current_per_motor / motor_rating_eff if motor_rating_eff > 0 else 0.0
     desync_stress *= kv_factor * prop_factor
     desync_stress *= demag_factor * timing_desync_factor
     desync_stress *= (1.0 + sag_race_pct * 2.0)  # sag increases desync risk
@@ -188,8 +220,10 @@ def render_metrics(cfg, kwad, perf, fuzz):
     # Battery Stress (props + motors + ESC + battery @ racing)
     # ---------------------------------------------------------
 
-    safe_current = kwad.battery.c_rating * (kwad.battery.capacity_mah / 1000.0)
-    batt_stress = racing_current / safe_current if safe_current > 0 else 0.0
+    safe_current_theoretical = kwad.battery.c_rating * (kwad.battery.capacity_mah / 1000.0)
+    safe_current_real = safe_current_theoretical * 0.5  # derate C-rating to realistic value
+
+    batt_stress = racing_current / safe_current_real if safe_current_real > 0 else 0.0
 
     # IR + sag penalty
     batt_stress *= (1.0 + sag_race_pct * 2.0)
@@ -222,7 +256,6 @@ def render_metrics(cfg, kwad, perf, fuzz):
     heat_bar("Desync Stress", desync_stress)
     heat_bar("Battery Stress", batt_stress)
     heat_bar("Overall Stress", overall_stress)
-
 
 
     # ---------------------------------------------------------

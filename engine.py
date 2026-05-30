@@ -159,6 +159,58 @@ def esc_temperature_rise(esc: ESC, current_a: float, time_s: float, fuzz: phys.F
 
 
 # ============================================================
+# Full-Throttle Performance Solver
+# ============================================================
+
+def full_throttle_performance(kwad: Kwad, fuzz: phys.Fuzz) -> tuple[float, float]:
+    """
+    Solve for self-consistent full-throttle current and power,
+    including battery sag under load.
+    Returns (full_throttle_power_w, full_throttle_current_a).
+    """
+    motor_count = len(kwad.motors)
+    if motor_count <= 0:
+        return 0.0, 0.0
+
+    motor = kwad.motors[0]
+    prop = kwad.props[0]
+
+    v_full = phys.pack_voltage_full(kwad.battery.cells_series, kwad.battery.chemistry)
+    r_internal = phys.pack_internal_resistance(
+        kwad.battery.cells_series, kwad.battery.chemistry, fuzz
+    )
+
+    v_loaded = v_full
+    total_current = 0.0
+
+    for _ in range(12):
+        # Thrust per motor at full throttle and current loaded voltage
+        thrust_per_motor = static_thrust(motor, prop, v_loaded, fuzz)
+
+        # Current per motor from that thrust at this voltage
+        current_per_motor = motor_current_from_thrust(
+            motor,
+            prop,
+            thrust_per_motor,
+            v_loaded,
+            fuzz,
+        )
+        total_current = current_per_motor * motor_count
+
+        # New loaded voltage from sag
+        new_v_loaded = phys.voltage_sag_under_load(v_full, total_current, r_internal)
+
+        if abs(new_v_loaded - v_loaded) < 0.05:
+            v_loaded = new_v_loaded
+            break
+
+        v_loaded = new_v_loaded
+
+    full_power = v_loaded * total_current
+    return full_power, total_current
+
+
+# ============================================================
 # High-Level Evaluation
 # ============================================================
 
@@ -170,6 +222,8 @@ class KwadPerformance:
     flight_time_min: float
     motor_temp_rise_c: float
     esc_temp_rise_c: float
+    full_throttle_power_w: float
+    full_throttle_current_a: float
 
 
 def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
@@ -178,7 +232,7 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
     # Initial hover throttle guess at open-circuit voltage
     h_throttle = hover_throttle(kwad, v_full, fuzz)
 
-    thrust_needed = hover_thrust_required(kwad)
+    thrust_needed = phys.weight_from_mass(auw_kg(kwad))
     motor_count = len(kwad.motors)
     if motor_count <= 0:
         return KwadPerformance(
@@ -188,6 +242,8 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
             flight_time_min=0.0,
             motor_temp_rise_c=0.0,
             esc_temp_rise_c=0.0,
+            full_throttle_power_w=0.0,
+            full_throttle_current_a=0.0,
         )
 
     thrust_per_motor = thrust_needed / motor_count
@@ -199,7 +255,7 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
         kwad.battery.cells_series, kwad.battery.chemistry, fuzz
     )
 
-    # Iterative sag loop: solve for self-consistent voltage and current
+    # Iterative sag loop: solve for self-consistent hover voltage and current
     v_loaded = v_full
     hover_current = 0.0
     current_per_motor = 0.0
@@ -222,7 +278,7 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
 
         v_loaded = new_v_loaded
 
-    # 🔧 Recompute hover throttle at the *loaded* voltage
+    # Recompute hover throttle at the loaded voltage
     h_throttle = hover_throttle(kwad, v_loaded, fuzz)
 
     # Electrical hover power
@@ -231,13 +287,16 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
     # Flight time
     ft = flight_time_minutes(kwad, total_power)
 
-    # Thermal (approximate)
+    # Thermal (approximate, at hover)
     motor_temp = motor_temperature_rise(motor, current_per_motor, 60, fuzz)
     esc_temp = esc_temperature_rise(kwad.esc, current_per_motor, 60, fuzz)
 
-    # Max thrust (full throttle at full voltage)
+    # Max thrust (full throttle at full voltage, no sag)
     max_thrust_per_motor = static_thrust(motor, prop, v_full, fuzz)
     max_total = max_thrust_per_motor * motor_count
+
+    # Full-throttle performance (with sag)
+    full_power, full_current = full_throttle_performance(kwad, fuzz)
 
     return KwadPerformance(
         hover_throttle=h_throttle,
@@ -246,4 +305,6 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
         flight_time_min=ft,
         motor_temp_rise_c=motor_temp,
         esc_temp_rise_c=esc_temp,
+        full_throttle_power_w=full_power,
+        full_throttle_current_a=full_current,
     )
