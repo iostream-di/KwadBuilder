@@ -2,7 +2,10 @@
 
 import streamlit as st
 from physics import voltage_sag_under_load
-from ui_metrics import clamp01   # or re‑define clamp01 here
+
+def clamp01(x):
+    return max(0.0, min(1.0, x))
+
 
 
 def heat_bar(label, value):
