@@ -155,7 +155,7 @@ class Kwad:
     camera: Camera
     receiver: Receiver
     battery: Battery
-    action_cam: Optional[ActionCam] = None
     payload: Payload
+    action_cam: Optional[ActionCam] = None
 
     # No weight calculations here — engine.py handles all computation.
