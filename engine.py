@@ -93,7 +93,6 @@ def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
     """
     Solve for hover throttle by matching thrust per motor to required hover thrust,
     using the nonlinear throttle→RPM mapping and the diameter-aware prop model.
-    Uses open-circuit voltage; sag is handled in evaluate_kwad.
     """
     thrust_needed = hover_thrust_required(kwad)
     motor_count = len(kwad.motors)
@@ -245,13 +244,10 @@ class KwadPerformance:
 
 def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
     """
-    High-level evaluation of quad performance with iterative sag convergence.
+    High-level evaluation of quad performance with sag-aware hover throttle.
     """
 
     v_full = phys.pack_voltage_full(kwad.battery.cells_series, kwad.battery.chemistry)
-
-    # Hover throttle at open-circuit voltage
-    h_throttle = hover_throttle(kwad, v_full, fuzz)
 
     thrust_needed = hover_thrust_required(kwad)
     motor_count = len(kwad.motors)
@@ -274,12 +270,16 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
         kwad.battery.cells_series, kwad.battery.chemistry, fuzz
     )
 
-    # Iterative sag loop: solve for self-consistent voltage and current
+    # Iterative sag + throttle loop: solve for self-consistent voltage, current, and throttle
     v_loaded = v_full
     hover_current = 0.0
     current_per_motor = 0.0
+    h_throttle = 0.5  # initial guess; will be overwritten
 
     for _ in range(8):
+        # Solve hover throttle at the current loaded voltage
+        h_throttle = hover_throttle(kwad, v_loaded, fuzz)
+
         # Current per motor from mech→elec power at this voltage
         current_per_motor = motor_current_from_thrust(
             motor,
