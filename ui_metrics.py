@@ -46,7 +46,8 @@ def render_metrics(cfg, kwad, perf, fuzz):
     st.subheader("Performance Metrics")
 
     # AUW
-    auw_kg = engine.auw_kg(kwad)
+    payload_g = cfg.get("payload_g", 0.0)  # default 0 if not set
+    auw_kg = engine.auw_kg(kwad) + (payload_g / 1000.0)
     auw_g = auw_kg * 1000.0
 
     # Max thrust
@@ -138,7 +139,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     cap_voltage_rating = next((v for v in standard_voltages if v >= cap_voltage_required), 63)
 
     # Dry Weight
-    dry_weight_g = auw_g - kwad.battery.weight_g
+    dry_weight_g = (engine.auw_kg(kwad) * 1000.0) - kwad.battery.weight_g
 
     # Max Prop Load (per motor)
     motor_count = len(kwad.motors)
