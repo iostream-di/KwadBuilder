@@ -126,7 +126,7 @@ def render_theory_section():
     st.latex(r"Loss_{CP/LP} \approx 3 \text{ dB}")
     st.latex(r"FresnelRadius = \sqrt{\frac{\lambda d_1 d_2}{d_1 + d_2}}")
 
-    st.write(\"""
+    st.write("""
     ### Free‑Space Path Loss (FSPL)
     - FSPL increases with both **distance** and **frequency**.
     - Higher frequency (5.8 GHz) loses range faster than lower frequency (2.4 GHz).
@@ -200,7 +200,7 @@ def render_theory_section():
         - Longest range
         - Best penetration
         - Large antennas
-    \""")
+    """)
 
 
     st.markdown("## Build Style Definitions")
