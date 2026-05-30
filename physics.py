@@ -243,17 +243,16 @@ def prop_power_from_thrust(
     # Induced power corrected by FM
     power = p_i / fm
 
-    # Profile drag (keep it moderate; it’s doing its job)
+    # Profile drag (already doing the right shape)
     k_profile = 1.0
     drag_scale = thrust_ratio ** 3
     p_profile = k_profile * drag_scale * (thrust_n ** (4/3)) * diameter_in
     power += p_profile
 
-    # --- THRUST-DEPENDENT GLOBAL LOSSES ---
-    # Low at hover, high at full send.
-    base_loss = 1.35          # gentle at low thrust
-    high_loss = 2.05          # strong at high thrust
-    loss_factor = base_loss + (high_loss - base_loss) * (thrust_ratio ** 2)
+    # Thrust-dependent global losses (slightly steeper)
+    base_loss = 1.35          # low-end efficiency
+    high_loss = 2.25          # was 2.05 – a bit harsher at full send
+    loss_factor = base_loss + (high_loss - base_loss) * (thrust_ratio ** 2.1)
     power *= loss_factor
 
     return power
