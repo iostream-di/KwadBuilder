@@ -152,6 +152,7 @@ def static_thrust_simple(
     Diameter-aware static thrust model.
     Behaves correctly for whoops, 5-inch, and larger props.
     """
+
     diameter_m = diameter_in * 0.0254
     pitch_m = pitch_in * 0.0254
     n = rpm / 60.0
@@ -173,8 +174,20 @@ def induced_power(thrust_n: float, disk_area_m2: float, fuzz: Fuzz,
                   rho: float = AIR_DENSITY_SEA_LEVEL) -> float:
     if thrust_n <= 0 or disk_area_m2 <= 0:
         return 0.0
+
     rho_adj = rho * fuzz.air_density_multiplier
+
+    # Clamp disk loading to a physically reasonable range to avoid overflow.
+    # Typical multirotor hover: ~100–200 N/m^2
+    # Aggressive full throttle: up to ~800–1000 N/m^2
+    disk_loading = thrust_n / disk_area_m2
+    max_disk_loading = 1000.0  # N/m^2, very aggressive but still sane
+
+    if disk_loading > max_disk_loading:
+        thrust_n = max_disk_loading * disk_area_m2
+
     return (thrust_n ** 1.5) / sqrt(2 * rho_adj * disk_area_m2)
+
 
 
 # ============================================================
