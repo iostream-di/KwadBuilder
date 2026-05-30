@@ -112,13 +112,14 @@ def _fm_for_diameter(diameter_in: float) -> float:
     """
     Figure of merit vs diameter:
     - Tiny props less efficient
-    - 5" around 0.26
+    - 5" around 0.18
     - Larger props slightly more efficient
     """
     d = _clamp_diameter_in(diameter_in)
-    fm_5 = 0.26
+    fm_5 = 0.18
     scale = (d / 5.0) ** 0.10
-    return max(0.22, min(0.32, fm_5 * scale))
+    # Clamp to a realistic range for multirotor props
+    return max(0.16, min(0.24, fm_5 * scale))
 
 
 def _motor_efficiency_for_load(load_fraction: float) -> float:
@@ -205,7 +206,7 @@ def prop_power_from_thrust(
     """
     Diameter-aware induced + profile power estimate for a prop.
     Returns mechanical power in Watts.
-    Tuned to avoid overestimating hover power on 5-inch.
+    Tuned for realistic hover power on 5-inch.
     """
     diameter_m = diameter_in * 0.0254
     area = math.pi * (diameter_m / 2.0) ** 2
@@ -217,12 +218,12 @@ def prop_power_from_thrust(
 
     power = p_i / fm
 
-    # Very mild blade penalty so 3-blade whoops don't blow up power
-    blade_loss_factor = 1.0 + 0.01 * (blades - 2)
+    # Stronger blade penalty so 3-blade props cost more power
+    blade_loss_factor = 1.0 + 0.05 * (blades - 2)
     power *= blade_loss_factor
 
-    # Tiny non-ideal losses
-    power *= 1.01
+    # Non-ideal losses (tip losses, inflow distortion, etc.)
+    power *= 1.30
 
     return power
 
