@@ -246,16 +246,24 @@ def prop_power_from_thrust(
 
     power = p_i / fm
 
-    # Moderate blade penalty: tri-blades cost noticeably more, but not insane
-    blade_loss_factor = 1.0 + 0.08 * (blades - 2)
-    power *= blade_loss_factor
-
-    # Non-ideal losses (tip, inflow distortion, profile drag, etc.)
-    # 1.5 is a good middle ground: more realistic than 1.3, not as brutal as 1.75.
-    base_loss_factor = 1.35
+        # Non-ideal losses (tip, inflow distortion, profile drag, etc.)
+    base_loss_factor = 1.40
     power *= base_loss_factor
 
+    # High disk loading penalty (only kicks in above hover)
+    if thrust_n > 0 and area > 0:
+        disk_loading = thrust_n / area  # N/m^2
+
+        # Typical 5" hover loading: ~120–150 N/m^2
+        # Start penalizing above ~200 N/m^2
+        if disk_loading > 200:
+            # Smooth exponential penalty
+            excess = (disk_loading - 200) / 200
+            high_load_factor = 1.0 + 0.35 * (excess ** 1.2)
+            power *= high_load_factor
+
     return power
+
 
 
 
