@@ -6,9 +6,9 @@ def render_theory_section():
         st.markdown("## Marty's Motor KV Formula")
 
         st.write("""
-        This formula gives you the correct motor KV for **any prop size** and **any cell count**
-        without needing lookup tables or community charts. It is based on the observation that
-        FPV quads across all sizes tend to run their propeller tips at about **70% of the speed of sound**.
+        This formula gives you the correct motor KV for **any prop size** and **any cell count**. 
+        It is based on the observation that FPV quads across all sizes tend to run their propeller
+        tips at about **70% of the speed of sound**.
         """)
 
         st.markdown("### Step 1 — Convert prop diameter to meters")
@@ -36,18 +36,14 @@ def render_theory_section():
         - 3.8 V per cell for nominal
         - 4.0 V per cell for design
         - 4.2 V per cell for full‑charge KV
+        - 4.35 V per cell for High-Voltage full-charge KV
         """)
 
         st.markdown("### Step 5 — Final KV Formula")
         st.latex(r"KV_{target} = \frac{RPM_{target}}{V_{pack}}")
 
         st.write("""
-        This produces KV values that match real‑world FPV builds:
-        - 5\" on 6S → ~1800 KV  
-        - 3\" on 1S → ~17,000–19,000 KV  
-        - 7\" on 6S → ~1200–1500 KV  
-
-        All from one formula, no lookups required.
+        This produces KV values that match real‑world FPV builds.
         """)
 
 
