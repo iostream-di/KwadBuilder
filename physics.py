@@ -248,7 +248,7 @@ def prop_power_from_thrust(
 
     # Non-ideal losses (tip, inflow distortion, profile drag, etc.)
     # Stronger global loss factor to make high thrust realistically expensive
-    base_loss_factor = 1.75
+    base_loss_factor = 2.00
     power *= base_loss_factor
 
     return power
