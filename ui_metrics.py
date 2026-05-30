@@ -118,9 +118,21 @@ def render_metrics(cfg, kwad, perf, fuzz):
     v_sag_ft = phys.voltage_sag_under_load(v_full, ft_current, r_pack)
     sag_ft_pct = (v_full - v_sag_ft) / v_full if v_full > 0 else 0.0
 
-    # Max Speed (MPH)
-    rpm_loaded = kwad.motors[0].kv_rpm_per_v * v_sag_ft * 0.9
-    max_speed_mph = cfg["prop_pitch"] * rpm_loaded * 0.000947
+    # Drag-limited top speed (realistic)
+    rho = phys.air_density(fuzz)
+    CdA = 0.04  # typical 5" quad frontal area * drag coefficient
+
+    T_total = perf.max_thrust_total_n
+    T_vertical = auw_kg * phys.GRAVITY
+
+    # Forward thrust available after holding itself up
+    T_forward = (T_total**2 - T_vertical**2)**0.5 if T_total > T_vertical else 0.0
+
+    # Solve T_forward = 0.5 * rho * CdA * v^2
+    v_max = (2 * T_forward / (rho * CdA))**0.5 if T_forward > 0 else 0.0
+
+    max_speed_mph = v_max * 2.23694
+
 
     # Flight Time (Freestyle)
     flight_time_freestyle = phys.ideal_flight_time_minutes(energy_wh, freestyle_power) if freestyle_power > 0 else 0.0
