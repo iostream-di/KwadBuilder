@@ -119,7 +119,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     sag_ft_pct = (v_full - v_sag_ft) / v_full if v_full > 0 else 0.0
 
     # Drag-limited top speed (realistic)
-    rho = phys.air_density(fuzz)
+    rho = phys.AIR_DENSITY_SEA_LEVEL * fuzz.air_density_multiplier
     CdA = 0.04  # typical 5" quad frontal area * drag coefficient
 
     T_total = perf.max_thrust_total_n
@@ -132,6 +132,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     v_max = (2 * T_forward / (rho * CdA))**0.5 if T_forward > 0 else 0.0
 
     max_speed_mph = v_max * 2.23694
+
 
 
     # Flight Time (Freestyle)
