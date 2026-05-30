@@ -235,10 +235,11 @@ def prop_power_from_thrust(
     fm_base = _fm_for_diameter(diameter_in) if figure_of_merit is None else figure_of_merit
     fm = max(fm_base * fuzz.figure_of_merit_multiplier, 0.1)
 
-    # FM dropoff at high thrust
+    # FM dropoff at high thrust (stronger)
     thrust_ratio = thrust_n / (thrust_n + 15.0)
-    fm_drop = 1.0 - 0.45 * (thrust_ratio ** 1.3)
+    fm_drop = 1.0 - 0.65 * (thrust_ratio ** 1.7)   # was 0.45 * r^1.3
     fm *= fm_drop
+
 
     # Induced power corrected by FM
     power = p_i / fm
