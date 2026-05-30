@@ -654,3 +654,73 @@ def render_theory_section():
             "Build": ["Whoop", "Toothpick", "Freestyle", "Racing", "Long Range"],
             "Flight Time": ["3–5 min", "3–6 min", "4–7 min", "1.5–3 min", "12–25 min"]
         })
+
+    with st.expander("Acronyms & Abbreviations", expanded=False):
+        st.markdown("## Common FPV & Engineering Acronyms")
+
+        st.write("""
+        **AUW** — All-Up Weight (total flying weight)  
+        **B_ref** — Reference blade count (tri-blade = 3)  
+        **CT** — Thrust Coefficient  
+        **DL** — Disk Loading  
+        **DShot** — Digital Shot (digital ESC protocol)  
+        **ESC** — Electronic Speed Controller  
+        **FC** — Flight Controller  
+        **FF** — Feed-Forward (stick prediction term in control loop)  
+        **FSPL** — Free-Space Path Loss  
+        **KV** — RPM per volt (motor constant)  
+        **Kt** — Torque constant (Nm per amp)  
+        **LPF** — Low-Pass Filter  
+        **mAh** — Milliamp-Hours (battery capacity)  
+        **PID** — Proportional, Integral, Derivative (control loop)  
+        **PLI** — Prop Load Index  
+        **PWM** — Pulse-Width Modulation  
+        **RPM** — Revolutions Per Minute  
+        **RSSI** — Received Signal Strength Indicator  
+        **S_ref** — Reference cell count (6S baseline)  
+        **TWR** — Thrust-to-Weight Ratio  
+        **VTX** — Video Transmitter  
+        **Wh** — Watt-Hours (battery energy)  
+        """)
+
+        st.markdown("## Battery & Power Terms")
+        st.write("""
+        **C Rating** — Discharge capability of a battery  
+        **IR** — Internal Resistance  
+        **LiPo** — Lithium Polymer battery  
+        **Li-Ion** — Lithium-Ion battery  
+        **V_cell** — Voltage per cell  
+        **V_pack** — Total pack voltage  
+        """)
+
+        st.markdown("## Radio & RF Terms")
+        st.write("""
+        **dB** — Decibel (logarithmic power ratio)  
+        **dBi** — Antenna gain relative to isotropic radiator  
+        **ELRS** — ExpressLRS (long-range RC protocol)  
+        **GHz** — Gigahertz (frequency unit)  
+        **LP** — Linear Polarization  
+        **CP** — Circular Polarization  
+        **LHCP/RHCP** — Left/Right-Hand Circular Polarization  
+        """)
+
+        st.markdown("## Prop & Motor Terms")
+        st.write("""
+        **D_in** — Prop diameter in inches  
+        **P_in** — Prop pitch in inches  
+        **B** — Blade count  
+        **d_mm** — Stator diameter in millimeters  
+        **h_mm** — Stator height in millimeters  
+        **ω (omega)** — Angular velocity (rad/s)  
+        """)
+
+        st.markdown("## Physics & Math Terms")
+        st.write("""
+        **ρ (rho)** — Air density  
+        **π (pi)** — 3.14159…  
+        **τ (tau)** — Torque  
+        **ω (omega)** — Angular velocity  
+        **A** — Area  
+        **T** — Thrust  
+        **P** — Power  
+        """)
