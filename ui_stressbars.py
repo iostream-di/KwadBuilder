@@ -139,7 +139,7 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
     # =========================================================
 
     safe_current_theoretical = battery.c_rating * (battery.capacity_mah / 1000.0)
-    safe_current_real = safe_current_theoretical * 0.5
+    safe_current_real = safe_current_theoretical * 0.8
 
     batt_stress = racing_current / safe_current_real
     batt_stress *= (1.0 + sag_race_pct)
