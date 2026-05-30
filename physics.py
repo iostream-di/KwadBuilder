@@ -255,6 +255,12 @@ def prop_power_from_thrust(
     loss_factor = base_loss + (high_loss - base_loss) * (thrust_ratio ** 2.1)
     power *= loss_factor
 
+    # --- HIGH-THRUST LOSS BOOST (logarithmic, gentle at low thrust) ---
+    # This only kicks in near full throttle.
+    boost = 1.0 + 0.55 * math.log1p(8.0 * thrust_ratio)
+    power *= boost
+
+
     return power
 
 
