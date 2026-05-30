@@ -200,7 +200,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
     motor_rating_eff = kwad.motors[0].max_current_a * 0.8 if motor_count > 0 else 1.0
     ratio = racing_current_per_motor / motor_rating_eff
-    motor_stress = clamp01((ratio ** 0.4) * kv_factor * prop_factor)
+    motor_stress = clamp01((ratio ** 0.2) * kv_factor * prop_factor)
     motor_stress *= kv_factor * prop_factor
     motor_stress = clamp01(motor_stress)
 
