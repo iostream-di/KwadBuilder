@@ -7,28 +7,33 @@ import streamlit as st
 # ---------------------------------------------------------
 
 DEFAULT_5IN = {
+    # Prop
     "prop_diameter": 5.1,
     "prop_pitch": 4.3,
     "prop_blades": 3,
-    "prop_weight": 3.5,
+    "prop_weight": 3.8,   # g, typical modern tri-blade
 
+    # Motor (2207/2208 class, 1950–2100 KV)
     "motor_kv": 1950,
     "motor_stator_d": 22,
     "motor_stator_h": 7,
-    "motor_current_rating": 40,
-    "motor_weight": 32,
+    "motor_current_rating": 48,  # realistic burst rating
+    "motor_weight": 34,          # g incl. wires
 
+    # Battery (6S 1500 mAh)
     "lipo_cells": 6,
     "lipo_capacity": 1500,
     "lipo_c": 80,
-    "lipo_weight": 253,
+    "lipo_weight": 255,          # g, real-world average
     "lipo_health": 100,
 
+    # Frame (freestyle)
     "frame_noise": 20,
     "frame_wheelbase": 225,
     "frame_prop_fit": 5.1,
-    "frame_weight": 150,
+    "frame_weight": 160,         # g, typical 5" freestyle frame
 
+    # FC / ESC
     "fc_loop": 1000,
     "fc_cpu": 60,
     "fc_dshot": 600,
@@ -40,17 +45,21 @@ DEFAULT_5IN = {
     "esc_timing": "med",
     "esc_weight": 14,
 
-    "video_power": 800,
+    # Video (digital)
+    "video_power": 8,            # W draw (O3 ~9W, WS ~5W)
     "video_weight": 30,
     "video_digital": True,
 
-    "rx_weight": 10,
+    # RX
+    "rx_weight": 6,
     "rx_elrs": True,
 
+    # Camera (action cam = payload, so default = 0)
     "cam_weight": 0,
 
+    # Build config
     "motor_count": 4,
-    "payload": 0,
+    "payload": 0,                # no GoPro, no accessories
 
     # Fuzz defaults
     "fuzz_air": 1.0,
@@ -66,6 +75,7 @@ DEFAULT_5IN = {
     "fuzz_fm": 1.0,
     "fuzz_hover_power": 1.0,
 }
+
 
 DEFAULT_WHOOP = {
     # (same as before)
