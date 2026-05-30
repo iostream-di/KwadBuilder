@@ -20,8 +20,8 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("Theoretical FPV Build Explorer")
-st.write("A modular, physics‑based quadcopter modeling tool.")
+st.title("MartyMayhem's FPV Build Explorer")
+st.write("A physics‑based FPV Drone build modeling tool.")
 
 
 # ---------------------------------------------------------

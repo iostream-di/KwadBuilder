@@ -2,7 +2,7 @@ import streamlit as st
 
 def render_theory_section():
 
-    with st.expander("Marty Mayhem's Build Logic", expanded=False):
+    with st.expander("MartyMayhem's Build Logic", expanded=False):
         st.markdown("## Marty's Motor KV Formula")
 
         st.write("""
@@ -49,7 +49,7 @@ def render_theory_section():
         +15% makes for one-time rockets.
         """)
 
-        st.markdown("## Stator Diameter & Height Formula")
+        st.markdown("## Marty's Stator Diameter & Height Formula")
 
         st.write("""
         Once KV is known, the next step is choosing a motor size that can supply the 
