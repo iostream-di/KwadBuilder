@@ -46,7 +46,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     st.subheader("Performance Metrics")
 
     # AUW
-    payload_g = cfg.get("payload_g", 0.0)  # default 0 if not set
+    payload_g = cfg.get("payload", 0.0)  # default 0 if not set
     auw_kg = engine.auw_kg(kwad) + (payload_g / 1000.0)
     auw_g = auw_kg * 1000.0
 
