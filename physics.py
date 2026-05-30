@@ -244,7 +244,6 @@ def prop_power_from_thrust(
     power = p_i / fm
 
     # --- PROFILE DRAG TERM (CRITICAL) ---
-    # Must be BEFORE the global loss factor
     k_profile = 0.18
     p_profile = k_profile * (thrust_n ** (2/3)) * diameter_in
     power += p_profile
@@ -254,6 +253,7 @@ def prop_power_from_thrust(
     power *= base_loss_factor
 
     return power
+
 
 
 
