@@ -99,27 +99,25 @@ def _clamp_diameter_in(diameter_in: float) -> float:
 def _ct_base_for_diameter(diameter_in: float) -> float:
     """
     Base CT scaling vs diameter:
-    anchored at 5" ≈ 0.048, slightly higher for tiny props,
-    slightly lower for very large props.
+    tuned so 5" on 6S with typical KV/props can reach ~1–1.3 kg thrust per motor.
     """
     d = _clamp_diameter_in(diameter_in)
-    base_ct_5 = 0.048
-    scale = (d / 5.0) ** -0.15
+    # Previously ~0.048; bumped to better match real 5" data
+    base_ct_5 = 0.075
+    scale = (d / 5.0) ** -0.12
     return base_ct_5 * scale
 
 
 def _fm_for_diameter(diameter_in: float) -> float:
     """
     Figure of merit vs diameter:
-    - Tiny props less efficient
-    - 5" around 0.18
-    - Larger props slightly more efficient
+    slightly pessimistic for 5" so electrical power for a given thrust is higher,
+    which raises current to realistic levels.
     """
     d = _clamp_diameter_in(diameter_in)
-    fm_5 = 0.18
-    scale = (d / 5.0) ** 0.10
-    # Clamp to a realistic range for multirotor props
-    return max(0.16, min(0.24, fm_5 * scale))
+    fm_5 = 0.16  # was 0.18
+    scale = (d / 5.0) ** 0.08
+    return max(0.14, min(0.22, fm_5 * scale))
 
 
 def _motor_efficiency_for_load(load_fraction: float) -> float:
@@ -150,7 +148,7 @@ def static_thrust_simple(
 ) -> float:
     """
     Diameter-aware static thrust model.
-    Behaves correctly for whoops, 5-inch, and larger props.
+    Tuned for realistic 5" thrust and scaled for other sizes.
     """
     diameter_m = diameter_in * 0.0254
     pitch_m = pitch_in * 0.0254
@@ -159,11 +157,13 @@ def static_thrust_simple(
     base_ct = _ct_base_for_diameter(diameter_in)
 
     p_over_d = pitch_m / max(diameter_m, 1e-6)
-    ct_pitch = base_ct * (p_over_d ** 0.65)
+    # Slightly stronger pitch influence
+    ct_pitch = base_ct * (p_over_d ** 0.7)
 
-    blade_factor = 1.0 + 0.10 * (blades - 2)
+    # Stronger blade factor: 3-blade gives noticeably more thrust
+    blade_factor = 1.0 + 0.18 * (blades - 2)
 
-    ct = ct_pitch * blade_factor * fuzz.prop_thrust_multiplier
+    ct = ct_pitch * blade_factor * fuzz.prop_thrust_multiplier * fuzz.thrust_coefficient_multiplier
 
     thrust_n = ct * rho * (n ** 2) * (diameter_m ** 4)
     return thrust_n
@@ -206,7 +206,7 @@ def prop_power_from_thrust(
     """
     Diameter-aware induced + profile power estimate for a prop.
     Returns mechanical power in Watts.
-    Tuned for realistic hover power on 5-inch.
+    Tuned for realistic hover and WOT power on 5-inch.
     """
     diameter_m = diameter_in * 0.0254
     area = math.pi * (diameter_m / 2.0) ** 2
@@ -219,11 +219,12 @@ def prop_power_from_thrust(
     power = p_i / fm
 
     # Stronger blade penalty so 3-blade props cost more power
-    blade_loss_factor = 1.0 + 0.05 * (blades - 2)
+    blade_loss_factor = 1.0 + 0.10 * (blades - 2)
     power *= blade_loss_factor
 
     # Non-ideal losses (tip losses, inflow distortion, etc.)
-    power *= 1.30
+    # Slightly higher to push current up toward real data
+    power *= 1.35
 
     return power
 
