@@ -243,14 +243,12 @@ def prop_power_from_thrust(
     # Induced power corrected by FM
     power = p_i / fm
 
-    # --- PROFILE DRAG TERM (STRONG, REALISTIC) ---
-    # Real 5" props burn huge power in profile drag at high RPM.
-    # This term must be large enough to dominate at full throttle.
-    k_profile = 0.40   # strong, realistic for 5" tri-blades
+    # --- PROFILE DRAG TERM (FINAL, REALISTIC) ---
+    # Real 5" props burn massive profile power at high RPM.
+    # This must dominate at full throttle.
+    k_profile = 1.20   # strong, realistic for 5" tri-blades
     p_profile = k_profile * (thrust_n ** (4/3)) * diameter_in
     power += p_profile
-
-
 
     # Global non-ideal losses
     base_loss_factor = 1.60
