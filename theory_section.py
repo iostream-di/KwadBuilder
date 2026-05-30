@@ -185,22 +185,104 @@ def render_theory_section():
     - Trees = −3 to −12 dB
     - Buildings = −20 to −40 dB
     - Wet foliage is RF death
-
-    ### Frequency Comparison
-    - **5.8 GHz**
-        - High bandwidth
-        - Short range
-        - Poor penetration
-        - Small antennas
-    - **2.4 GHz**
-        - Medium range
-        - Better penetration
-        - Good for control links
-    - **900 MHz**
-        - Longest range
-        - Best penetration
-        - Large antennas
     """)
+
+        st.markdown("## Frequency Comparison (Civilian & Military UAS Bands)")
+
+    st.latex(r"FSPL(dB) = 20\log_{10}(d) + 20\log_{10}(f) + 32.44")
+    st.latex(r"Range \propto 10^{\frac{LinkBudget}{20}}")
+
+    st.write("""
+    Below is a comparison of common FPV frequencies and the major bands used in 
+    professional and military‑grade UAS systems. These are physics‑based characteristics, 
+    not operational details.
+
+    ### **5.8 GHz (Civilian FPV Video)**
+    - Shortest range
+    - Weak penetration
+    - Very small antennas
+    - High bandwidth → good video quality
+    - Strongly affected by foliage and walls
+
+    ### **2.4 GHz (ELRS, WiFi, Control Links)**
+    - Medium range
+    - Better penetration than 5.8 GHz
+    - Moderate antenna size
+    - Good balance of range + bandwidth
+
+    ### **900 MHz / 868 MHz (Long‑Range Control)**
+    - Long range
+    - Excellent penetration
+    - Large antennas
+    - Lower bandwidth → not used for HD video
+
+    ---
+
+    ## **Military / Professional UAS Frequency Bands**
+
+    ### **L‑Band (1–2 GHz)**
+    - Good penetration through foliage and buildings
+    - Long range due to low FSPL
+    - Moderate antenna size
+    - Used for telemetry, command links, and SATCOM uplinks
+    - Physics: lower frequency → larger Fresnel zone, better NLOS performance
+
+    ### **S‑Band (2–4 GHz)**
+    - Similar to 2.4 GHz civilian but with more bandwidth
+    - Good compromise between range and data rate
+    - Often used for robust command & control (C2) links
+    - Less attenuation than C‑band or Ku‑band
+
+    ### **C‑Band (4–8 GHz)**
+    - Higher bandwidth → supports high‑rate video/data
+    - Shorter range than L/S bands
+    - More LOS‑dependent
+    - Smaller antennas than L/S band
+    - Often used for tactical UAS video downlinks
+
+    ### **Ku‑Band (12–18 GHz)**
+    - Very high bandwidth
+    - Shorter range unless using directional antennas
+    - Primarily used for SATCOM on larger UAS platforms
+    - Requires precise antenna pointing
+    - Strongly affected by rain fade and atmospheric absorption
+
+    ---
+
+    ## **Propagation Characteristics by Frequency**
+
+    ### **Range**
+    - Lower frequency → longer range
+    - Higher frequency → shorter range
+
+    ### **Penetration**
+    - Lower frequency → better penetration (foliage, buildings)
+    - Higher frequency → poor penetration
+
+    ### **Antenna Size**
+    - Lower frequency → larger antennas
+    - Higher frequency → smaller antennas
+
+    ### **Bandwidth**
+    - Higher frequency → more bandwidth (better video/data)
+    - Lower frequency → less bandwidth (better control reliability)
+
+    ---
+
+    ## **Practical Summary**
+
+    | Band | Frequency | Range | Penetration | Antenna Size | Bandwidth | Typical Use |
+    |------|-----------|--------|--------------|----------------|------------|--------------|
+    | 900 MHz | 0.9 GHz | Excellent | Excellent | Large | Low | LR control |
+    | 2.4 GHz | 2.4 GHz | Good | Good | Medium | Medium | Control / FPV |
+    | 5.8 GHz | 5.8 GHz | Short | Poor | Small | High | FPV video |
+    | L‑Band | 1–2 GHz | Excellent | Excellent | Medium‑Large | Low‑Med | C2 / Telemetry |
+    | S‑Band | 2–4 GHz | Good | Good | Medium | Medium | C2 / Video |
+    | C‑Band | 4–8 GHz | Medium | Fair | Small | High | Video downlink |
+    | Ku‑Band | 12–18 GHz | Short | Very Poor | Very Small | Very High | SATCOM video/data |
+
+    """)
+
 
 
     st.markdown("## Build Style Definitions")
