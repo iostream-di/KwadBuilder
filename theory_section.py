@@ -177,6 +177,11 @@ def render_theory_section():
         - Going higher will run hotter, bleed the pack faster, and risk motor desyncs. 
         Small throttle movements are more exaggerated. High pitch is ideal for aggressive 
         freestyle and racing since you are getting the punch you need from the props.
+
+        These are the basic formulas I use on my own builds. They are mostly based on my own
+        studies and community driven data. I am not an aerospace engineer. My strengths are 
+        in embedded systems engineering. But, I am an FPV pilot and an engineer at heart. Use 
+        these formulas with caution. I am not responsible for any injury or damages. Good luck, bro.
         """)
 
 
