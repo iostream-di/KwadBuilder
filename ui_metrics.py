@@ -1,21 +1,12 @@
-# ui_metrics.py
-
 import streamlit as st
 import physics as phys
 import engine
+from ui_stressbars import render_stress_bars
 
-
-# ---------------------------------------------------------
-# Helper: Clamp
-# ---------------------------------------------------------
 
 def clamp01(x):
     return max(0.0, min(1.0, x))
 
-
-# ---------------------------------------------------------
-# Helper: Heat Bar Renderer
-# ---------------------------------------------------------
 
 def heat_bar(label, value):
     pct = int(clamp01(value) * 100)
@@ -35,10 +26,6 @@ def heat_bar(label, value):
     """
     st.markdown(html, unsafe_allow_html=True)
 
-
-# ---------------------------------------------------------
-# Main Metrics Renderer
-# ---------------------------------------------------------
 
 def render_metrics(cfg, kwad, perf, fuzz):
 
@@ -66,6 +53,19 @@ def render_metrics(cfg, kwad, perf, fuzz):
     v_sag = phys.voltage_sag_under_load(v_full, hover_current, r_pack)
     sag_pct = (v_full - v_sag) / v_full if v_full > 0 else 0.0
 
+    # Full throttle & profiles
+    ft_current = perf.full_throttle_current_a
+    ft_power = perf.full_throttle_power_w
+
+    racing_current = ft_current * 0.75
+    racing_power = racing_current * v_nom if v_nom > 0 else 0.0
+
+    freestyle_current = 0.5 * (hover_current + racing_current)
+    freestyle_power = freestyle_current * v_nom if v_nom > 0 else 0.0
+
+    # Pack energy
+    energy_wh = phys.energy_wh_from_capacity(kwad.battery.capacity_mah, v_nom)
+
     # ---------------------------------------------------------
     # Expanded Performance Metrics
     # ---------------------------------------------------------
@@ -86,27 +86,19 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
     # Max Voltage Sag (Full Throttle)
     v_sag_ft = phys.voltage_sag_under_load(v_full, ft_current, r_pack)
-    sag_ft_pct = (v_full - v_sag_ft) / v_full
+    sag_ft_pct = (v_full - v_sag_ft) / v_full if v_full > 0 else 0.0
 
     # Flight Time (Freestyle)
-    flight_time_freestyle = phys.ideal_flight_time_minutes(energy_wh, freestyle_power)
+    flight_time_freestyle = phys.ideal_flight_time_minutes(energy_wh, freestyle_power) if freestyle_power > 0 else 0.0
 
-    # Battery Warning Voltage (half freestyle time)
+    # Battery Warning Voltage (freestyle load)
     v_warn = phys.voltage_sag_under_load(v_full, freestyle_current, r_pack)
 
     # Battery Land Voltage
     v_land = 3.5 * kwad.battery.cells_series
 
     # Max Acceleration (G)
-    max_accel_g = (perf.max_thrust_total_n - weight_n) / (auw_kg * phys.GRAVITY)
-
-    # Real full-throttle from engine
-    ft_current = perf.full_throttle_current_a
-    ft_power = perf.full_throttle_power_w
-
-    # Derive a realistic racing current (~75% of full throttle)
-    racing_current = ft_current * 0.75
-    racing_power = racing_current * v_nom if v_nom > 0 else 0.0
+    max_accel_g = (perf.max_thrust_total_n - weight_n) / (auw_kg * phys.GRAVITY) if auw_kg > 0 else 0.0
 
     col1, col2 = st.columns(2)
 
@@ -119,7 +111,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("TWR", f"{twr:.2f} : 1")
         st.metric("Hover Throttle", f"{perf.hover_throttle:.2f}")
         st.metric("Max Sag (FT)", f"{sag_ft_pct * 100:.1f} %")
-        
+
     with col2:
         st.metric("Hover Power", f"{hover_power:.0f} W")
         st.metric("High Power", f"{high_power:.0f} W")
@@ -127,9 +119,9 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("High Current", f"{high_current:.1f} A")
         st.metric("Max Current", f"{max_current:.1f} A")
         st.metric("Voltage Sag (Hover)", f"{sag_pct * 100:.1f} %")
+        st.metric("Flight Time (Freestyle)", f"{flight_time_freestyle:.1f} min")
         st.metric("Battery Warning Voltage", f"{v_warn:.2f} V")
         st.metric("Battery Land Voltage", f"{v_land:.2f} V")
-        
 
     # ---------------------------------------------------------
     # Flight Time Breakdown (physics-derived)
@@ -141,8 +133,6 @@ def render_metrics(cfg, kwad, perf, fuzz):
         rows_current = []
         rows_time = []
 
-        energy_wh = phys.energy_wh_from_capacity(kwad.battery.capacity_mah, v_nom)
-
         # Loitering: light load below hover
         loiter_current = hover_current * 0.6
         loiter_power = loiter_current * v_nom if v_nom > 0 else 0.0
@@ -151,9 +141,8 @@ def render_metrics(cfg, kwad, perf, fuzz):
         cruise_current = hover_current
         cruise_power = hover_power
 
-        # Freestyle: mid between hover and racing
-        freestyle_current = 0.5 * (hover_current + racing_current)
-        freestyle_power = freestyle_current * v_nom if v_nom > 0 else 0.0
+        # Freestyle: mid between hover and racing (reuse)
+        # freestyle_current, freestyle_power already defined
 
         # Full throttle: from engine
         full_current = ft_current
@@ -179,14 +168,11 @@ def render_metrics(cfg, kwad, perf, fuzz):
             "Flight Time": rows_time,
         })
 
-
-
-    from ui_stressbars import render_stress_bars
-
-    # ...
+    # ---------------------------------------------------------
+    # Stress Bars
+    # ---------------------------------------------------------
 
     render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current)
-
 
     # ---------------------------------------------------------
     # Build Style Classification
