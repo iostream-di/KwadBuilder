@@ -92,7 +92,7 @@ def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
     """
     Solve for hover throttle by matching thrust per motor to required hover thrust,
     using the nonlinear throttle→RPM mapping and the diameter-aware prop model.
-    Sag is handled later in evaluate_kwad; this uses open-circuit voltage.
+    Uses open-circuit voltage; sag is handled in evaluate_kwad.
     """
     thrust_needed = hover_thrust_required(kwad)
     thrust_per_motor = thrust_needed / len(kwad.motors)
@@ -230,7 +230,7 @@ class KwadPerformance:
 
 def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
     """
-    High-level evaluation of quad performance.
+    High-level evaluation of quad performance with iterative sag convergence.
     """
 
     v_full = phys.pack_voltage_full(kwad.battery.cells_series, kwad.battery.chemistry)
@@ -244,36 +244,36 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
     motor = kwad.motors[0]
     prop = kwad.props[0]
 
-    # First-pass hover RPM and current at v_full
-    rpm_hover = phys.throttle_to_rpm(h_throttle, motor.kv_rpm_per_v, v_full)
-    current_per_motor = motor_current_from_thrust(
-        motor,
-        prop,
-        rpm_hover,
-        thrust_per_motor,
-        fuzz,
-    )
-    hover_current = current_per_motor * len(kwad.motors)
-
-    # Apply battery sag
     r_internal = phys.pack_internal_resistance(
         kwad.battery.cells_series, kwad.battery.chemistry, fuzz
     )
-    v_loaded = phys.voltage_sag_under_load(v_full, hover_current, r_internal)
 
-    # Recompute RPM and current at sagged voltage
-    rpm_hover = phys.throttle_to_rpm(h_throttle, motor.kv_rpm_per_v, v_loaded)
-    current_per_motor = motor_current_from_thrust(
-        motor,
-        prop,
-        rpm_hover,
-        thrust_per_motor,
-        fuzz,
-    )
-    hover_current = current_per_motor * len(kwad.motors)
+    # Iterative sag loop: solve for self-consistent voltage and current
+    v_loaded = v_full
+    hover_current = 0.0
+    current_per_motor = 0.0
+
+    for _ in range(8):
+        rpm_hover = phys.throttle_to_rpm(h_throttle, motor.kv_rpm_per_v, v_loaded)
+        current_per_motor = motor_current_from_thrust(
+            motor,
+            prop,
+            rpm_hover,
+            thrust_per_motor,
+            fuzz,
+        )
+        hover_current = current_per_motor * len(kwad.motors)
+
+        new_v_loaded = phys.voltage_sag_under_load(v_full, hover_current, r_internal)
+
+        if abs(new_v_loaded - v_loaded) < 0.02:
+            v_loaded = new_v_loaded
+            break
+
+        v_loaded = new_v_loaded
 
     # Electrical hover power
-    total_power = v_loaded * hover_current
+    total_power = v_loaded * hover_current * fuzz.hover_power_multiplier
 
     # Flight time
     ft = flight_time_minutes(kwad, total_power)

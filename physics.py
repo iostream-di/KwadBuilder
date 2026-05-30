@@ -1,5 +1,5 @@
 """
-physics.py — diameter-aware, tuned for realistic quad performance
+physics.py — diameter-aware, full realism pass
 """
 
 from __future__ import annotations
@@ -93,20 +93,17 @@ class ThermalModel:
 # ============================================================
 
 def _clamp_diameter_in(diameter_in: float) -> float:
-    # Keep within a sane multirotor range (whoop → X-class)
     return max(1.0, min(12.0, diameter_in))
 
 
 def _ct_base_for_diameter(diameter_in: float) -> float:
     """
     Base CT scaling vs diameter:
-    - Slightly higher CT for tiny props (low Re)
-    - Slightly lower CT for very large props
-    Anchored at 5" ≈ 0.048.
+    anchored at 5" ≈ 0.048, slightly higher for tiny props,
+    slightly lower for very large props.
     """
     d = _clamp_diameter_in(diameter_in)
     base_ct_5 = 0.048
-    # Small props: +10–15%, big props: −10–15%
     scale = (d / 5.0) ** -0.15
     return base_ct_5 * scale
 
@@ -114,14 +111,24 @@ def _ct_base_for_diameter(diameter_in: float) -> float:
 def _fm_for_diameter(diameter_in: float) -> float:
     """
     Figure of merit vs diameter:
-    - Tiny props are less efficient
-    - 5" around 0.19
+    - Tiny props less efficient
+    - 5" around 0.22
     - Larger props slightly more efficient
     """
     d = _clamp_diameter_in(diameter_in)
-    fm_5 = 0.19
+    fm_5 = 0.22
     scale = (d / 5.0) ** 0.10
-    return max(0.14, min(0.24, fm_5 * scale))
+    return max(0.18, min(0.28, fm_5 * scale))
+
+
+def _motor_efficiency_for_load(load_fraction: float) -> float:
+    """
+    Simple motor efficiency curve vs load fraction (0–1).
+    Peak around 0.4–0.6, softer at extremes.
+    """
+    x = max(0.0, min(1.0, load_fraction))
+    # Quadratic bump: ~0.7 at extremes, ~0.9 at mid-load
+    return 0.7 + 0.2 * (1.0 - (2.0 * x - 1.0) ** 2)
 
 
 # ============================================================
@@ -153,7 +160,6 @@ def static_thrust_simple(
     p_over_d = pitch_m / max(diameter_m, 1e-6)
     ct_pitch = base_ct * (p_over_d ** 0.65)
 
-    # Slightly weaker blade scaling so 3-blade whoops don't explode
     blade_factor = 1.0 + 0.10 * (blades - 2)
 
     ct = ct_pitch * blade_factor * fuzz.prop_thrust_multiplier
@@ -199,6 +205,7 @@ def prop_power_from_thrust(
     """
     Diameter-aware induced + profile power estimate for a prop.
     Returns mechanical power in Watts.
+    Tuned to avoid overestimating hover power on 5-inch.
     """
     diameter_m = diameter_in * 0.0254
     area = math.pi * (diameter_m / 2.0) ** 2
@@ -210,11 +217,12 @@ def prop_power_from_thrust(
 
     power = p_i / fm
 
-    blade_loss_factor = 1.0 + 0.06 * (blades - 2)
+    # Very mild blade penalty so 3-blade whoops don't blow up power
+    blade_loss_factor = 1.0 + 0.03 * (blades - 2)
     power *= blade_loss_factor
 
-    # Slight non-ideal losses
-    power *= 1.08
+    # Small non-ideal losses
+    power *= 1.03
 
     return power
 
@@ -235,6 +243,17 @@ def motor_current_for_torque(torque_nm: float, kv_rpm_per_v: float,
                              fuzz: Fuzz, no_load_current_a: float = 0.0) -> float:
     kt = motor_torque_constant(kv_rpm_per_v, fuzz)
     return torque_nm / max(kt, 1e-9) + no_load_current_a
+
+
+def motor_output_power(input_power_w: float, load_fraction: float, fuzz: Fuzz) -> float:
+    """
+    Apply a simple efficiency curve to electrical input power.
+    Not currently used in engine, but available if needed.
+    """
+    eff_curve = _motor_efficiency_for_load(load_fraction)
+    eff = eff_curve * fuzz.motor_efficiency_multiplier
+    eff = max(0.3, min(0.98, eff))
+    return input_power_w * eff
 
 
 # ============================================================
