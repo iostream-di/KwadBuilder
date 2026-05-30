@@ -246,7 +246,7 @@ def prop_power_from_thrust(
 
     # --- PROFILE DRAG TERM: ONLY BIG AT HIGH THRUST ---
     # Small near hover, ramps hard toward full throttle.
-    k_profile = 1.15
+    k_profile = 1.45
     drag_scale = thrust_ratio ** 3  # ~0 at hover, ~1 at full send
     p_profile = k_profile * drag_scale * (thrust_n ** (4/3)) * diameter_in
     power += p_profile
