@@ -187,7 +187,7 @@ def render_theory_section():
     - Wet foliage is RF death
     """)
 
-        st.markdown("## Frequency Comparison (Civilian & Military UAS Bands)")
+    st.markdown("## Frequency Comparison (Civilian & Military UAS Bands)")
 
     st.latex(r"FSPL(dB) = 20\log_{10}(d) + 20\log_{10}(f) + 32.44")
     st.latex(r"Range \propto 10^{\frac{LinkBudget}{20}}")
