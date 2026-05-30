@@ -1,5 +1,5 @@
 """
-physics.py — tuned + corrected for realistic 5-inch quad performance
+physics.py — diameter-aware, tuned for realistic quad performance
 """
 
 from __future__ import annotations
@@ -53,12 +53,11 @@ class BatteryChemistry:
     internal_resistance_per_cell_ohm: float
 
 
-# Tuned for real 6S LiPo behavior
 LIPO_DEFAULT = BatteryChemistry(
     nominal_cell_voltage=3.7,
     full_cell_voltage=4.2,
     empty_cell_voltage=3.3,
-    internal_resistance_per_cell_ohm=0.0045,  # 4.5 mΩ per cell
+    internal_resistance_per_cell_ohm=0.0045,
 )
 
 
@@ -90,6 +89,42 @@ class ThermalModel:
 
 
 # ============================================================
+# Helpers for diameter-aware scaling
+# ============================================================
+
+def _clamp_diameter_in(diameter_in: float) -> float:
+    # Keep within a sane multirotor range (whoop → X-class)
+    return max(1.0, min(12.0, diameter_in))
+
+
+def _ct_base_for_diameter(diameter_in: float) -> float:
+    """
+    Base CT scaling vs diameter:
+    - Slightly higher CT for tiny props (low Re)
+    - Slightly lower CT for very large props
+    Anchored at 5" ≈ 0.048.
+    """
+    d = _clamp_diameter_in(diameter_in)
+    base_ct_5 = 0.048
+    # Small props: +10–15%, big props: −10–15%
+    scale = (d / 5.0) ** -0.15
+    return base_ct_5 * scale
+
+
+def _fm_for_diameter(diameter_in: float) -> float:
+    """
+    Figure of merit vs diameter:
+    - Tiny props are less efficient
+    - 5" around 0.19
+    - Larger props slightly more efficient
+    """
+    d = _clamp_diameter_in(diameter_in)
+    fm_5 = 0.19
+    scale = (d / 5.0) ** 0.10
+    return max(0.14, min(0.24, fm_5 * scale))
+
+
+# ============================================================
 # Aerodynamics
 # ============================================================
 
@@ -106,21 +141,20 @@ def static_thrust_simple(
     rho: float = AIR_DENSITY_SEA_LEVEL,
 ) -> float:
     """
-    Tuned static thrust model for 5-inch props.
-    Produces realistic thrust for 5x4.8x3 on 1950KV.
+    Diameter-aware static thrust model.
+    Behaves correctly for whoops, 5-inch, and larger props.
     """
-
     diameter_m = diameter_in * 0.0254
     pitch_m = pitch_in * 0.0254
     n = rpm / 60.0
 
-    # Tuned CT for 5-inch props (real-world ~0.045–0.055)
-    base_ct = 0.048
+    base_ct = _ct_base_for_diameter(diameter_in)
 
-    p_over_d = pitch_m / diameter_m
+    p_over_d = pitch_m / max(diameter_m, 1e-6)
     ct_pitch = base_ct * (p_over_d ** 0.65)
 
-    blade_factor = 1.0 + 0.12 * (blades - 2)
+    # Slightly weaker blade scaling so 3-blade whoops don't explode
+    blade_factor = 1.0 + 0.10 * (blades - 2)
 
     ct = ct_pitch * blade_factor * fuzz.prop_thrust_multiplier
 
@@ -143,7 +177,8 @@ def induced_power(thrust_n: float, disk_area_m2: float, fuzz: Fuzz,
 def throttle_to_rpm(throttle: float, kv_rpm_per_v: float, voltage_v: float,
                     alpha: float = 1.32) -> float:
     """
-    Tuned throttle curve: alpha=1.32 matches 32% hover for 600g 5-inch.
+    Nonlinear throttle → RPM mapping.
+    alpha tuned for 5-inch; still reasonable for other sizes.
     """
     throttle = max(0.0, min(1.0, throttle))
     return (throttle ** alpha) * kv_rpm_per_v * voltage_v
@@ -159,29 +194,29 @@ def prop_power_from_thrust(
     blades: int,
     fuzz: Fuzz,
     rho: float = AIR_DENSITY_SEA_LEVEL,
-    figure_of_merit: float = 0.19,
+    figure_of_merit: float | None = None,
 ) -> float:
     """
-    Tuned for 5-inch props.
-    FM=0.19 matches real-world efficiency of 5x4.8x3.
+    Diameter-aware induced + profile power estimate for a prop.
+    Returns mechanical power in Watts.
     """
-
     diameter_m = diameter_in * 0.0254
     area = math.pi * (diameter_m / 2.0) ** 2
 
     p_i = induced_power(thrust_n, area, fuzz, rho)
 
-    fm = max(figure_of_merit * fuzz.figure_of_merit_multiplier, 0.1)
+    fm_base = _fm_for_diameter(diameter_in) if figure_of_merit is None else figure_of_merit
+    fm = max(fm_base * fuzz.figure_of_merit_multiplier, 0.1)
 
     power = p_i / fm
 
-    blade_loss_factor = 1.0 + 0.08 * (blades - 2)
+    blade_loss_factor = 1.0 + 0.06 * (blades - 2)
     power *= blade_loss_factor
 
-    # 10% non-ideal losses (tip vortices, inflow distortion)
-    power *= 1.10
+    # Slight non-ideal losses
+    power *= 1.08
 
-    return power  # mechanical power
+    return power
 
 
 # ============================================================

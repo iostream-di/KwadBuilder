@@ -63,10 +63,7 @@ def motor_rpm_from_voltage(motor: Motor, voltage_v: float) -> float:
 
 def static_thrust(motor: Motor, prop: Propeller, voltage_v: float, fuzz: phys.Fuzz) -> float:
     """
-    Static max thrust per motor using the upgraded prop model:
-    - Uses diameter, pitch, and blade count
-    - Uses nonlinear throttle→RPM at full throttle
-    Returns thrust in Newtons.
+    Static max thrust per motor using the diameter-aware prop model.
     """
     rpm = phys.throttle_to_rpm(1.0, motor.kv_rpm_per_v, voltage_v)
 
@@ -94,7 +91,7 @@ def hover_thrust_required(kwad: Kwad) -> float:
 def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
     """
     Solve for hover throttle by matching thrust per motor to required hover thrust,
-    using the nonlinear throttle→RPM mapping and the tuned prop model.
+    using the nonlinear throttle→RPM mapping and the diameter-aware prop model.
     Sag is handled later in evaluate_kwad; this uses open-circuit voltage.
     """
     thrust_needed = hover_thrust_required(kwad)
@@ -135,8 +132,8 @@ def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
 
 def hover_mech_power_total_w(kwad: Kwad, thrust_per_motor_n: float, fuzz: phys.Fuzz) -> float:
     """
-    Hover mechanical power at the props using induced power (momentum theory)
-    and the tuned prop power function (pitch + blade count).
+    Hover mechanical power at the props using induced power
+    and the diameter-aware prop power function.
     """
     total = 0.0
     for prop in kwad.props:
