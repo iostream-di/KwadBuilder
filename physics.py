@@ -225,15 +225,6 @@ def prop_power_from_thrust(
     rho: float = AIR_DENSITY_SEA_LEVEL,
     figure_of_merit: float | None = None,
 ) -> float:
-    """
-    Diameter-aware induced + profile power estimate for a prop.
-    Returns mechanical power in Watts.
-
-    Tuned to give:
-    - Realistic hover power on 5" tri-blade
-    - Realistic full-throttle current on 5" freestyle
-    without blowing up micros or 7".
-    """
     diameter_m = diameter_in * 0.0254
     area = math.pi * (diameter_m / 2.0) ** 2
 
@@ -244,7 +235,7 @@ def prop_power_from_thrust(
     fm_base = _fm_for_diameter(diameter_in) if figure_of_merit is None else figure_of_merit
     fm = max(fm_base * fuzz.figure_of_merit_multiplier, 0.1)
 
-    # FM dropoff at high thrust (5" props lose efficiency fast)
+    # FM dropoff at high thrust
     thrust_ratio = thrust_n / (thrust_n + 15.0)
     fm_drop = 1.0 - 0.45 * (thrust_ratio ** 1.3)
     fm *= fm_drop
@@ -252,9 +243,9 @@ def prop_power_from_thrust(
     # Induced power corrected by FM
     power = p_i / fm
 
-    # --- Profile drag power term (CRITICAL) ---
-    # Profile drag grows ~quadratically with RPM, which scales with thrust^(1/3)
-    k_profile = 0.18  # tuned for 5" tri-blades
+    # --- PROFILE DRAG TERM (CRITICAL) ---
+    # Must be BEFORE the global loss factor
+    k_profile = 0.18
     p_profile = k_profile * (thrust_n ** (2/3)) * diameter_in
     power += p_profile
 
