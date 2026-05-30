@@ -134,6 +134,11 @@ class Receiver:
     weight_g: float
 
 
+@dataclass
+class Payload:
+    name: str
+    weight_g: float
+
 # ============================================================
 # Kwad (aggregate)
 # ============================================================
@@ -151,5 +156,6 @@ class Kwad:
     receiver: Receiver
     battery: Battery
     action_cam: Optional[ActionCam] = None
+    payload: Payload
 
     # No weight calculations here — engine.py handles all computation.
