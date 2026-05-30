@@ -105,8 +105,8 @@ def render_metrics(cfg, kwad, perf, fuzz):
     # ---------------------------------------------------------
 
     # Max Speed (MPH)
-    rpm = kwad.motors[0].kv_rpm_per_v * v_nom * 0.9
-    max_speed_mph = cfg["prop_pitch"] * rpm * 0.000947
+    rpm_loaded = kwad.motors[0].kv_rpm_per_v * v_sag_ft * 0.9
+    max_speed_mph = cfg["prop_pitch"] * rpm_loaded * 0.000947
 
     # High Power & High Current (Racing)
     high_current = racing_current
