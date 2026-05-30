@@ -724,3 +724,75 @@ def render_theory_section():
         **T** — Thrust  
         **P** — Power  
         """)
+
+    with st.expander("FPV Slang & Community Terminology", expanded=False):
+        st.markdown("## Common FPV Slang & What It Means")
+
+        st.write("""
+        **Bando** — An abandoned building or structure used for freestyle flying.  
+        **Send / Full Send** — Flying aggressively with no hesitation.  
+        **Rip / Ripping** — Flying fast, hard, or with style.  
+        **Pack** — A battery (LiPo or Li-Ion).  
+        **Sag** — Voltage drop under load.  
+        **Desync** — When a motor loses sync with the ESC, causing a crash.  
+        **Turtle Mode** — Using reversed motors to flip the quad upright after a crash.  
+        **Propwash** — Turbulence from your own props causing wobble on throttle chop.  
+        **Jello** — Wavy video caused by vibration.  
+        **Whoop** — Tiny ducted quad (1.6–2.0”).  
+        **Toothpick** — Ultra-light 2.5–3” quad with minimal frame.  
+        **Cinewhoop** — Ducted quad for smooth cinematic footage.  
+        **Freestyle** — Flow-based acrobatic flying.  
+        **Racer** — High-speed, gate-focused quad.  
+        **Long Range** — Built for endurance and distance.  
+        **Failsafe** — Loss of radio link causing the quad to drop or return.  
+        **Brownout** — Momentary voltage drop causing electronics to reboot.  
+        **Magic Smoke** — When electronics burn out (jokingly: “the smoke that makes electronics work”).  
+        **Batteries are spicy** — Battery is puffed, damaged, or dangerous.  
+        **Bando Basher** — A quad built tough for crashing into concrete.  
+        **Tuning** — Adjusting PID, filters, and FF for better flight performance.  
+        **Dry Weight** — Weight without battery.  
+        **AUW** — All-Up Weight (with battery).  
+        **Punchout** — Full-throttle vertical climb.  
+        **Yaw Washout** — Sudden yaw dip during hard turns or dives.  
+        **Ghost Branch** — Invisible thin branch that ruins your day.  
+        **Gremlin** — A tiny 2” micro quad.  
+        **Prop Strike** — When props hit something (frame, wire, branch).  
+        **Brap / Braaap** — The sound of a quad ripping (yes, it’s a word).  
+        """)
+
+        st.markdown("## Social & Community Terms")
+        st.write("""
+        **OG** — Original pilot from early FPV days.  
+        **Sim** — Flight simulator (Liftoff, Velocidrone, DRL, etc.).  
+        **Spotter** — Person watching your flight for safety.  
+        **Failsafe Dance** — The quad twitching or spinning after failsafe.  
+        **Dumpster Dive** — Searching for a lost quad in trash, bushes, or sketchy places.  
+        **Walk of Shame** — Walking to retrieve your crashed quad.  
+        **Tree’d** — When your quad gets stuck in a tree.  
+        **Grass Ninja** — When your quad disappears into grass like it was never there.  
+        """)
+
+        st.markdown("## Build & Repair Slang")
+        st.write("""
+        **Blue Smoke** — Burned electronics (same as magic smoke).  
+        **Soft Mount** — Rubber mounting to reduce vibration.  
+        **Hard Mount** — Direct mounting (no vibration isolation).  
+        **Stack** — FC + ESC assembly.  
+        **Smoke Stopper** — Inline current limiter to prevent frying electronics.  
+        **Conformal Coat** — Waterproofing electronics with silicone coating.  
+        **Frankenbuild** — A quad made from mismatched or leftover parts.  
+        **Solder Goblin** — Someone who solders like a gremlin (badly).  
+        **Tuning Gremlins** — Mysterious issues that disappear when you stop looking.  
+        """)
+
+        st.markdown("## Pilot Skill & Flying Style Terms")
+        st.write("""
+        **Flow** — Smooth, continuous freestyle movement.  
+        **Juicy** — Snappy, rhythmic freestyle with lots of reversals.  
+        **Matty Flip** — Backwards inverted dive around an object.  
+        **Powerloop** — Looping through a gap or around an object.  
+        **Dive** — Vertical drop down a building or structure.  
+        **Skimming** — Flying extremely close to the ground or surfaces.  
+        **Gap** — Any opening you try to fly through.  
+        **Micro Gap** — A stupidly small gap you shouldn’t try but will anyway.  
+        """)
