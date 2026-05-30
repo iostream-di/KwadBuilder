@@ -182,16 +182,10 @@ def induced_power(thrust_n: float, disk_area_m2: float, fuzz: Fuzz,
 
     rho_adj = rho * fuzz.air_density_multiplier
 
-    # Clamp disk loading to a physically reasonable range to avoid overflow.
-    # Typical multirotor hover: ~100–200 N/m^2
-    # Aggressive full throttle: up to ~800–1000 N/m^2
-    disk_loading = thrust_n / disk_area_m2
-    max_disk_loading = 1000.0  # N/m^2, very aggressive but still sane
-
-    if disk_loading > max_disk_loading:
-        thrust_n = max_disk_loading * disk_area_m2
-
+    # No aggressive clamp here; let thrust be what it is.
+    # Numerical safety is handled by RPM clamping in static_thrust_simple.
     return (thrust_n ** 1.5) / sqrt(2 * rho_adj * disk_area_m2)
+
 
 
 
@@ -225,10 +219,10 @@ def prop_power_from_thrust(
     Diameter-aware induced + profile power estimate for a prop.
     Returns mechanical power in Watts.
 
-    Tuned so that:
-    - 5" tri-blade on 6S, 1950 KV
-    - Gives realistic hover AND full-throttle current
-    for a typical 5" freestyle quad.
+    Tuned to give:
+    - Realistic hover power on 5" tri-blade
+    - Realistic full-throttle current on 5" freestyle
+    without blowing up micros or 7".
     """
     diameter_m = diameter_in * 0.0254
     area = math.pi * (diameter_m / 2.0) ** 2
@@ -242,25 +236,17 @@ def prop_power_from_thrust(
 
     power = p_i / fm
 
-    # Stronger blade penalty: tri-blades are noticeably more lossy
-    blade_loss_factor = 1.0 + 0.12 * (blades - 2)
+    # Moderate blade penalty: tri-blades cost noticeably more, but not insane
+    blade_loss_factor = 1.0 + 0.08 * (blades - 2)
     power *= blade_loss_factor
 
-    # Non-ideal losses (tip, inflow distortion, high-Re drag, etc.)
-    # Was 1.30; that was too optimistic for 5" at high RPM.
-    base_loss_factor = 1.75
+    # Non-ideal losses (tip, inflow distortion, profile drag, etc.)
+    # 1.5 is a good middle ground: more realistic than 1.3, not as brutal as 1.75.
+    base_loss_factor = 1.50
     power *= base_loss_factor
 
-    # Mild extra penalty at very high disk loading (full throttle on small props)
-    # This keeps hover close to old behavior but punishes high thrust more.
-    if thrust_n > 0 and area > 0:
-        disk_loading = thrust_n / area  # N/m^2
-        # Normalize around a typical 5" hover loading (~120–150 N/m^2)
-        dl_norm = disk_loading / 150.0
-        high_load_factor = 1.0 + 0.20 * max(dl_norm - 1.0, 0.0)
-        power *= high_load_factor
-
     return power
+
 
 
 
