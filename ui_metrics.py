@@ -100,6 +100,13 @@ def render_metrics(cfg, kwad, perf, fuzz):
     # Max Acceleration (G)
     max_accel_g = (perf.max_thrust_total_n - weight_n) / (auw_kg * phys.GRAVITY)
 
+    # Real full-throttle from engine
+    ft_current = perf.full_throttle_current_a
+    ft_power = perf.full_throttle_power_w
+
+    # Derive a realistic racing current (~75% of full throttle)
+    racing_current = ft_current * 0.75
+    racing_power = racing_current * v_nom if v_nom > 0 else 0.0
 
     col1, col2 = st.columns(2)
 
@@ -135,14 +142,6 @@ def render_metrics(cfg, kwad, perf, fuzz):
         rows_time = []
 
         energy_wh = phys.energy_wh_from_capacity(kwad.battery.capacity_mah, v_nom)
-
-        # Real full-throttle from engine
-        ft_current = perf.full_throttle_current_a
-        ft_power = perf.full_throttle_power_w
-
-        # Derive a realistic racing current (~75% of full throttle)
-        racing_current = ft_current * 0.75
-        racing_power = racing_current * v_nom if v_nom > 0 else 0.0
 
         # Loitering: light load below hover
         loiter_current = hover_current * 0.6
