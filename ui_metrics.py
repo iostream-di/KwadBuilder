@@ -66,14 +66,6 @@ def render_metrics(cfg, kwad, perf, fuzz):
     v_sag = phys.voltage_sag_under_load(v_full, hover_current, r_pack)
     sag_pct = (v_full - v_sag) / v_full if v_full > 0 else 0.0
 
-    # Real full-throttle from engine
-    ft_current = perf.full_throttle_current_a
-    ft_power = perf.full_throttle_power_w
-
-    # Derive a realistic racing current (~75% of full throttle)
-    racing_current = ft_current * 0.75
-    racing_power = racing_current * v_nom if v_nom > 0 else 0.0
-
     # ---------------------------------------------------------
     # Expanded Performance Metrics
     # ---------------------------------------------------------
@@ -107,6 +99,14 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
     # Max Acceleration (G)
     max_accel_g = (perf.max_thrust_total_n - weight_n) / (auw_kg * phys.GRAVITY)
+
+    # Real full-throttle from engine
+    ft_current = perf.full_throttle_current_a
+    ft_power = perf.full_throttle_power_w
+
+    # Derive a realistic racing current (~75% of full throttle)
+    racing_current = ft_current * 0.75
+    racing_power = racing_current * v_nom if v_nom > 0 else 0.0
 
     col1, col2 = st.columns(2)
 
