@@ -141,7 +141,7 @@ def motor_current_from_thrust(
 # ============================================================
 
 def flight_time_minutes(kwad: Kwad, avg_power_w: float) -> float:
-    v_nom = phys.pack_voltage_nominal(kwad.battery.cells_series, kwad.battery.chemistry)
+    v_nom = phys.pack_voltage_full(kwad.battery.cells_series, kwad.battery.chemistry)
     energy_wh = phys.energy_wh_from_capacity(kwad.battery.capacity_mah, v_nom)
     return phys.ideal_flight_time_minutes(energy_wh, avg_power_w)
 
