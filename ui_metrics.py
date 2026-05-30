@@ -118,20 +118,103 @@ def render_metrics(cfg, kwad, perf, fuzz):
 
 
     # ---------------------------------------------------------
-    # Stress Bars
+    # Stress Bars (Racing Profile)
     # ---------------------------------------------------------
 
     st.subheader("Thermal & Reliability Stress")
 
-    hover_current_per_motor = hover_current / len(kwad.motors) if kwad.motors else 0.0
-    safe_current = kwad.battery.c_rating * (kwad.battery.capacity_mah / 1000.0)
+    # Racing profile = 2.0 × hover power
+    racing_power = hover_power * 2.0
+    racing_current = racing_power / v_nom if v_nom > 0 else 0.0
+    racing_current_per_motor = racing_current / len(kwad.motors) if kwad.motors else 0.0
 
-    fc_stress = cfg["fc_cpu"] / 100.0
-    esc_stress = hover_current_per_motor / kwad.esc.continuous_current_a if kwad.esc.continuous_current_a > 0 else 0.0
-    motor_stress = hover_current_per_motor / kwad.motors[0].max_current_a if kwad.motors and kwad.motors[0].max_current_a > 0 else 0.0
-    batt_stress = hover_current / safe_current if safe_current > 0 else 0.0
-    desync_stress = clamp01(max(esc_stress, motor_stress) * 1.1)
-    overall_stress = clamp01((fc_stress + esc_stress + motor_stress + batt_stress) / 4.0)
+    # Battery sag at racing load
+    v_sag_race = phys.voltage_sag_under_load(v_full, racing_current, r_pack)
+    sag_race_pct = (v_full - v_sag_race) / v_full if v_full > 0 else 0.0
+
+    # ---------------------------------------------------------
+    # FC Stress (realistic CPU model)
+    # ---------------------------------------------------------
+
+    loop_factor = cfg["fc_loop"] / 4000.0          # 1k = 0.25, 4k = 1.0
+    dshot_factor = cfg["fc_dshot"] / 1200.0        # 600 = 0.5
+    noise_factor = cfg["frame_noise"] / 50.0       # noisy frames = more filtering
+    motor_factor = len(kwad.motors) / 4.0          # hex/octo scale
+
+    fc_stress = (
+        loop_factor * 0.40 +
+        dshot_factor * 0.20 +
+        noise_factor * 0.20 +
+        motor_factor * 0.20
+    )
+    fc_stress = clamp01(fc_stress)
+
+    # ---------------------------------------------------------
+    # ESC Stress (prop + motor + ESC + battery @ racing load)
+    # ---------------------------------------------------------
+
+    timing_factor = {"low": 0.9, "med": 1.0, "high": 1.1}[cfg["esc_timing"]]
+    pwm_factor = min(cfg["esc_pwm"] / 48000, 1.2)
+
+    esc_stress = racing_current_per_motor / kwad.esc.continuous_current_a
+    esc_stress *= timing_factor * pwm_factor
+    esc_stress = clamp01(esc_stress)
+
+    # ---------------------------------------------------------
+    # Motor Stress (battery + ESC + motor limits + props @ racing)
+    # ---------------------------------------------------------
+
+    kv_factor = kwad.motors[0].kv_rpm_per_v / 1950.0
+    prop_factor = (cfg["prop_diameter"] / 5.1) * (cfg["prop_pitch"] / 4.3)
+
+    motor_stress = racing_current_per_motor / kwad.motors[0].max_current_a
+    motor_stress *= kv_factor * prop_factor
+    motor_stress = clamp01(motor_stress)
+
+    # ---------------------------------------------------------
+    # Desync Stress (KV + pitch + demag + timing + sag @ racing)
+    # ---------------------------------------------------------
+
+    demag_factor = {"high": 0.7, "med": 1.0, "low": 1.3}[cfg["esc_demag"]]
+    timing_desync_factor = {"low": 1.2, "med": 1.0, "high": 0.8}[cfg["esc_timing"]]
+
+    desync_stress = racing_current_per_motor / kwad.motors[0].max_current_a
+    desync_stress *= kv_factor * prop_factor
+    desync_stress *= demag_factor * timing_desync_factor
+    desync_stress *= (1.0 + sag_race_pct * 2.0)  # sag increases desync risk
+    desync_stress = clamp01(desync_stress)
+
+    # ---------------------------------------------------------
+    # Battery Stress (props + motors + ESC + battery @ racing)
+    # ---------------------------------------------------------
+
+    safe_current = kwad.battery.c_rating * (kwad.battery.capacity_mah / 1000.0)
+    batt_stress = racing_current / safe_current if safe_current > 0 else 0.0
+
+    # IR + sag penalty
+    batt_stress *= (1.0 + sag_race_pct * 2.0)
+
+    # battery health penalty
+    health_factor = 100.0 / max(cfg["lipo_health"], 1.0)
+    batt_stress *= health_factor
+
+    batt_stress = clamp01(batt_stress)
+
+    # ---------------------------------------------------------
+    # Overall Stress (average-high)
+    # ---------------------------------------------------------
+
+    stress_list = [fc_stress, esc_stress, motor_stress, desync_stress, batt_stress]
+
+    overall_stress = max(
+        0.5 * max(stress_list),
+        0.5 * (sum(stress_list) / len(stress_list))
+    )
+    overall_stress = clamp01(overall_stress)
+
+    # ---------------------------------------------------------
+    # Render Bars
+    # ---------------------------------------------------------
 
     heat_bar("FC Stress", fc_stress)
     heat_bar("ESC Stress", esc_stress)
@@ -139,6 +222,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     heat_bar("Desync Stress", desync_stress)
     heat_bar("Battery Stress", batt_stress)
     heat_bar("Overall Stress", overall_stress)
+
 
 
     # ---------------------------------------------------------
