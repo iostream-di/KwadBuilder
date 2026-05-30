@@ -12,6 +12,23 @@ def clamp01(x):
     return max(0.0, min(1.0, x))
 
 
+def spade_score(twr):
+    if twr < 3:
+        return "Jacks"
+    elif twr < 4:
+        return "Queens"
+    elif twr < 5:
+        return "Kings"
+    elif twr < 7:
+        return "Ace"
+    elif twr < 9:
+        return "Deuce"
+    elif twr < 12:
+        return "Joker"
+    else:
+        return "JOKER!"
+
+
 # ---------------------------------------------------------
 # Helper: Heat Bar Renderer
 # ---------------------------------------------------------
@@ -198,6 +215,8 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("Battery Warning Voltage", f"{v_warn:.2f} V")
         st.metric("Battery Land Voltage", f"{v_land:.2f} V")
         st.metric("Capacitor Required (Low ESR)", f"{cap_required_uf:.0f} µF @ {cap_voltage_rating} V")
+        st.metric("Spade Score", spade_score(twr))
+
 
     # ---------------------------------------------------------
     # Flight Time Breakdown
