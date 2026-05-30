@@ -6,47 +6,163 @@ def render_theory_section():
         st.markdown("## Marty's Motor KV Formula")
 
         st.write("""
-        This formula gives you the correct motor KV for **any prop size** and **any cell count**. 
-        It is based on the observation that FPV quads across all sizes tend to run their propeller
-        tips at about **70% of the speed of sound**.
+        This formula estimates an appropriate motor KV for **any prop size**
+        and **any battery voltage**.
+
+        It is based on the observation that many successful FPV drone designs
+        tend to operate with propeller tip speeds around **70% of the speed
+        of sound**. By maintaining a similar tip Mach number across different
+        prop sizes, we can derive a useful scaling rule for motor KV.
         """)
 
         st.markdown("### Step 1 — Convert prop diameter to meters")
+
         st.latex(r"D_m = D_{in} \cdot 0.0254")
 
-        st.markdown("### Step 2 — Use the universal FPV tip‑speed constant")
-        st.latex(r"k_{tip} = 0.70")
-        st.latex(r"a = 343\ \text{m/s}")
-
-        st.write("This represents the typical unloaded tip‑speed FPV quads operate at.")
-
-        st.markdown("### Step 3 — Compute target unloaded RPM for that prop size")
-        st.latex(r"RPM_{target} = \frac{k_{tip} \cdot a \cdot 60}{\pi \cdot D_m}")
+        st.markdown("### Step 2 — Calculate prop tip speed")
 
         st.write("""
-        This gives the ideal unloaded RPM for the prop size, matching real FPV builds across
-        2\", 3\", 5\", 7\", and larger platforms.
+        Propeller tip speed is determined by prop diameter and rotational speed:
         """)
 
-        st.markdown("### Step 4 — Compute pack voltage")
-        st.latex(r"V_{pack} = S \cdot V_{cell}")
+        st.latex(r"V_{tip} = \pi D \frac{RPM}{60}")
+
+        st.markdown("### Step 3 — Relate tip speed to Mach number")
 
         st.write("""
-        Use:
-        - 3.8 V per cell for nominal
-        - 4.0 V per cell for design
-        - 4.2 V per cell for full‑charge KV
-        - 4.35 V per cell for High-Voltage full-charge KV
+        We assume the propeller operates near 70% of the speed of sound:
         """)
 
-        st.markdown("### Step 5 — Final KV Formula")
-        st.latex(r"KV_{target} = \frac{RPM_{target}}{V_{pack}}")
+        st.latex(r"V_{tip} = M \cdot a")
 
         st.write("""
-        This produces KV values that match real‑world FPV builds. You can go higer or 
-        lower than this by 10% to give you a decent change in your build character. 15% 
-        deviation is my max. Normally I have seen that -15% makes it too gentile, and 
-        +15% makes for one-time rockets.
+        Where:
+
+        - M = 0.70 (target Mach fraction)
+        - a = 343 m/s (speed of sound at sea level)
+        """)
+
+        st.markdown("### Step 4 — Relate RPM to Motor KV")
+
+        st.write("""
+        Motor RPM can be approximated as:
+        """)
+
+        st.latex(r"RPM = KV \cdot V \cdot \eta")
+
+        st.write("""
+        Where:
+
+        - KV = motor constant (RPM/V)
+        - V = battery voltage under load
+        - η = loaded RPM factor
+
+        For this model:
+
+        - η = 0.90
+        """)
+
+        st.markdown("### Step 5 — Solve for KV")
+
+        st.write("""
+        Combining the equations gives:
+        """)
+
+        st.latex(
+            r"KV = \frac{60 M a}{\pi D V \eta}"
+        )
+
+        st.write("""
+        Substituting:
+
+        - M = 0.70
+        - a = 343 m/s
+        - η = 0.90
+
+        and converting diameter to inches yields:
+        """)
+
+        st.latex(
+            r"KV \approx \frac{229289}{D_{in} \cdot V}"
+        )
+
+        st.markdown("### Final Formula")
+
+        st.success(
+            "KV ≈ 229289 / (Prop Diameter in Inches × Battery Voltage)"
+        )
+
+        st.latex(
+            r"KV \approx \frac{229289}{D_{in} \cdot V}"
+        )
+
+        st.markdown("### Example Calculations")
+
+        st.write("**5 inch prop on 6S (22.2V nominal)**")
+
+        st.latex(
+            r"KV = \frac{229289}{5 \cdot 22.2}"
+        )
+
+        st.latex(
+            r"KV \approx 2066"
+        )
+
+        st.write("**7 inch prop on 6S (22.2V nominal)**")
+
+        st.latex(
+            r"KV = \frac{229289}{7 \cdot 22.2}"
+        )
+
+        st.latex(
+            r"KV \approx 1476"
+        )
+
+        st.write("**10 inch prop on 6S (22.2V nominal)**")
+
+        st.latex(
+            r"KV = \frac{229289}{10 \cdot 22.2}"
+        )
+
+        st.latex(
+            r"KV \approx 1033"
+        )
+
+        st.write("**15 inch prop on 12S (44.4V nominal)**")
+
+        st.latex(
+            r"KV = \frac{229289}{15 \cdot 44.4}"
+        )
+
+        st.latex(
+            r"KV \approx 344"
+        )
+
+        st.markdown("### Why It Works")
+
+        st.write("""
+        Rearranging the equation shows:
+
+        KV × Diameter × Voltage ≈ Constant
+
+        This means that when propeller diameter increases, motor KV should
+        decrease proportionally. Likewise, increasing battery voltage allows
+        lower-KV motors to reach the same effective tip speed.
+
+        This relationship appears repeatedly across successful FPV drone
+        designs, from 65 mm tiny whoops to large cinematic and heavy-lift
+        aircraft.
+        """)
+
+        st.latex(
+            r"KV \cdot D_{in} \cdot V \approx 229289"
+        )
+
+        st.info("""
+        This formula is intended as a first-order sizing rule rather than a
+        strict engineering limit. Prop pitch, motor efficiency, aircraft
+        weight, desired throttle authority, battery sag, and flight style
+        can all influence the final KV choice.
         """)
 
         st.markdown("## Marty's Stator Diameter & Height Formula")

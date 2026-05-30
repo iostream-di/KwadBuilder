@@ -1,9 +1,44 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 David Martinez
+
 """
-physics.py — diameter-aware, final power/efficiency tuning
+physics.py — Multirotor Propulsion & Power Modeling Engine
+==========================================================
+
+This module implements a diameter‑aware, semi‑empirical physics engine for
+multirotor UAVs. It models:
+
+- Static thrust generation
+- Induced power (momentum theory)
+- Profile drag power
+- Motor electrical behavior
+- Battery voltage sag
+- Thermal rise (steady‑state & transient)
+- Diameter‑dependent CT and Figure‑of‑Merit scaling
+- Nonlinear throttle → RPM mapping
+
+The goal is not perfect CFD accuracy, but a *realistic, stable, and tunable*
+model that behaves correctly across:
+
+- Whoops (1.6–2.0")
+- Toothpicks (2.5–3")
+- Freestyle quads (5")
+- Long‑range rigs (6–7")
+- Utility platforms (8–12")
+
+This engine is used by higher‑level simulation and sizing tools. All function
+names, parameters, and return values are stable and relied upon by other
+modules — **do not rename anything**.
+
+The model is intentionally “fuzzable” via the `Fuzz` class, allowing global
+multipliers to tune realism, compensate for unknowns, or match real‑world
+bench data.
+
+This file is licensed under GPL‑3.0‑or‑later. You may modify and redistribute
+it under the terms of that license.
 """
 
 from __future__ import annotations
-
 from dataclasses import dataclass
 import math
 from math import pi, sqrt, exp
@@ -22,6 +57,16 @@ AIR_DENSITY_SEA_LEVEL = 1.225
 
 @dataclass
 class Fuzz:
+    """
+    Global multipliers used to tune realism across the entire engine.
+
+    These allow adjusting thrust, drag, thermal behavior, battery IR,
+    and other subsystems without modifying core equations.
+
+    This is essential because real‑world multirotor behavior varies
+    significantly with prop brand, ESC firmware, motor design, and
+    environmental conditions.
+    """
     air_density_multiplier: float = 1.0
     drag_multiplier: float = 1.0
     prop_thrust_multiplier: float = 1.0
@@ -30,7 +75,6 @@ class Fuzz:
     motor_efficiency_multiplier: float = 1.0
 
     battery_ir_multiplier: float = 1.0
-
     esc_loss_multiplier: float = 1.0
 
     thermal_resistance_multiplier: float = 1.0
@@ -47,12 +91,22 @@ class Fuzz:
 
 @dataclass(frozen=True)
 class BatteryChemistry:
+    """
+    Defines the electrical characteristics of a battery chemistry.
+
+    Attributes:
+        nominal_cell_voltage: Voltage at nominal charge.
+        full_cell_voltage: Voltage at full charge.
+        empty_cell_voltage: Minimum safe voltage.
+        internal_resistance_per_cell_ohm: IR per cell (Ohms).
+    """
     nominal_cell_voltage: float
     full_cell_voltage: float
     empty_cell_voltage: float
     internal_resistance_per_cell_ohm: float
 
 
+# Default LiPo chemistry
 LIPO_DEFAULT = BatteryChemistry(
     nominal_cell_voltage=3.7,
     full_cell_voltage=4.2,
@@ -67,40 +121,63 @@ LIPO_DEFAULT = BatteryChemistry(
 
 @dataclass(frozen=True)
 class MotorPhysicsParams:
+    """
+    Basic electrical parameters for a brushless motor.
+
+    Attributes:
+        kv_rpm_per_v: Motor KV constant.
+        resistance_ohm: Winding resistance.
+        no_load_current_a: Current at zero torque.
+        efficiency: Peak motor efficiency (0–1).
+    """
     kv_rpm_per_v: float
     resistance_ohm: float
     no_load_current_a: float
-    efficiency: float  # 0–1
+    efficiency: float
 
 
 # ============================================================
-# Thermal model parameters
+# Thermal model
 # ============================================================
 
 @dataclass(frozen=True)
 class ThermalModel:
+    """
+    First‑order thermal model for ESCs or motors.
+
+    Attributes:
+        thermal_resistance_c_per_w: °C rise per watt at steady state.
+        thermal_capacitance_j_per_c: Thermal mass (J/°C).
+
+    The time constant τ = R * C determines how fast temperature rises.
+    """
     thermal_resistance_c_per_w: float
     thermal_capacitance_j_per_c: float
 
     def tau_seconds(self, fuzz: Fuzz) -> float:
+        """Return thermal time constant τ (seconds)."""
         r = self.thermal_resistance_c_per_w * fuzz.thermal_resistance_multiplier
         c = self.thermal_capacitance_j_per_c * fuzz.thermal_capacitance_multiplier
         return r * c
 
 
 # ============================================================
-# Helpers for diameter-aware scaling
+# Diameter-aware scaling helpers
 # ============================================================
 
 def _clamp_diameter_in(diameter_in: float) -> float:
+    """Clamp prop diameter to a safe modeling range."""
     return max(1.0, min(12.0, diameter_in))
 
 
 def _ct_base_for_diameter(diameter_in: float) -> float:
     """
-    Base CT scaling vs diameter:
-    anchored at 5" ≈ 0.048, slightly higher for tiny props,
-    slightly lower for very large props.
+    Base thrust coefficient scaling vs diameter.
+
+    Empirically:
+    - Tiny props have slightly higher CT
+    - Large props have slightly lower CT
+    - 5" baseline ≈ 0.078
     """
     d = _clamp_diameter_in(diameter_in)
     base_ct_5 = 0.078
@@ -110,25 +187,27 @@ def _ct_base_for_diameter(diameter_in: float) -> float:
 
 def _fm_for_diameter(diameter_in: float) -> float:
     """
-    Figure of merit vs diameter:
-    - Tiny props less efficient
-    - 5" around 0.18
-    - Larger props slightly more efficient
+    Figure of Merit scaling vs diameter.
+
+    - Tiny props are less efficient
+    - 5" ≈ 0.18
+    - Large props slightly more efficient
+    - Clamped to realistic multirotor ranges
     """
     d = _clamp_diameter_in(diameter_in)
     fm_5 = 0.18
     scale = (d / 5.0) ** 0.10
-    # Clamp to a realistic range for multirotor props
     return max(0.16, min(0.24, fm_5 * scale))
 
 
 def _motor_efficiency_for_load(load_fraction: float) -> float:
     """
     Simple motor efficiency curve vs load fraction (0–1).
-    Peak around 0.4–0.6, softer at extremes.
+
+    Peak efficiency occurs around 40–60% load.
+    Efficiency falls off at very low or very high load.
     """
     x = max(0.0, min(1.0, load_fraction))
-    # Quadratic bump: ~0.75 at extremes, ~0.92 at mid-load
     return 0.75 + 0.17 * (1.0 - (2.0 * x - 1.0) ** 2)
 
 
@@ -137,6 +216,7 @@ def _motor_efficiency_for_load(load_fraction: float) -> float:
 # ============================================================
 
 def weight_from_mass(mass_kg: float) -> float:
+    """Convert mass (kg) to weight (N)."""
     return mass_kg * GRAVITY
 
 
@@ -149,72 +229,72 @@ def static_thrust_simple(
     rho: float = AIR_DENSITY_SEA_LEVEL,
 ) -> float:
     """
-    Diameter-aware static thrust model.
-    Behaves correctly for whoops, 5-inch, and larger props.
-    """
+    Compute static thrust using a diameter‑aware CT model.
 
-    # Absolute numerical safety clamp.
-    # No real motor/prop combo will ever see 200k rpm under load.
-    rpm = max(0.0, min(rpm, 200_000.0))
+    Includes:
+    - Pitch scaling
+    - Blade count scaling
+    - Tip Mach dropoff (CT reduction near Mach 0.7–0.9)
+    - Fuzz multipliers
+
+    This model is stable across 2"–12" props.
+    """
+    rpm = max(0.0, min(rpm, 200_000.0))  # Safety clamp
 
     diameter_m = diameter_in * 0.0254
     pitch_m = pitch_in * 0.0254
-    n = rpm / 60.0
+    n = rpm / 60.0  # rev/sec
 
     base_ct = _ct_base_for_diameter(diameter_in)
 
+    # Pitch influence
     p_over_d = pitch_m / max(diameter_m, 1e-6)
     ct_pitch = base_ct * (p_over_d ** 0.65)
 
+    # Blade influence (2-blade baseline)
     blade_factor = 1.0 + 0.10 * (blades - 2)
 
     ct = ct_pitch * blade_factor * fuzz.prop_thrust_multiplier
 
-    # Tip Mach / high-RPM CT dropoff
-    # n is rev/sec, diameter_m is meters
+    # Tip Mach dropoff
     tip_speed = pi * diameter_m * n
-    mach = tip_speed / 343.0  # speed of sound
+    mach = tip_speed / 343.0
+    ct *= 1.0 / (1.0 + 3.0 * max(mach - 0.6, 0.0))
 
-    # Reduce CT as Mach approaches 0.7–0.9
-    mach_factor = 1.0 / (1.0 + 3.0 * max(mach - 0.6, 0.0))
-    ct *= mach_factor
-
-
-    thrust_n = ct * rho * (n ** 2) * (diameter_m ** 4)
-    return thrust_n
-
+    return ct * rho * (n ** 2) * (diameter_m ** 4)
 
 
 def induced_power(thrust_n: float, disk_area_m2: float, fuzz: Fuzz,
                   rho: float = AIR_DENSITY_SEA_LEVEL) -> float:
+    """
+    Ideal induced power from momentum theory.
+
+    P_i = T^(3/2) / sqrt(2 ρ A)
+    """
     if thrust_n <= 0 or disk_area_m2 <= 0:
         return 0.0
 
     rho_adj = rho * fuzz.air_density_multiplier
-
-    # No aggressive clamp here; let thrust be what it is.
-    # Numerical safety is handled by RPM clamping in static_thrust_simple.
     return (thrust_n ** 1.5) / sqrt(2 * rho_adj * disk_area_m2)
 
 
-
-
 # ============================================================
-# Throttle → RPM (nonlinear)
+# Throttle → RPM mapping
 # ============================================================
 
 def throttle_to_rpm(throttle: float, kv_rpm_per_v: float, voltage_v: float,
                     alpha: float = 1.32) -> float:
     """
     Nonlinear throttle → RPM mapping.
-    alpha tuned for 5-inch; still reasonable for other sizes.
+
+    alpha = 1.32 was tuned for 5" quads but behaves reasonably across sizes.
     """
     throttle = max(0.0, min(1.0, throttle))
     return (throttle ** alpha) * kv_rpm_per_v * voltage_v
 
 
 # ============================================================
-# Prop power model (mechanical)
+# Prop power model
 # ============================================================
 
 def prop_power_from_thrust(
@@ -225,42 +305,34 @@ def prop_power_from_thrust(
     rho: float = AIR_DENSITY_SEA_LEVEL,
     figure_of_merit: float | None = None,
 ) -> float:
+    """
+    Compute mechanical power required to generate a given thrust.
+
+    Includes:
+    - Induced power (momentum theory)
+    - Diameter‑dependent Figure of Merit
+    - FM dropoff at high thrust
+    - Profile drag term (dominant at high thrust)
+    - Global non‑ideal losses
+    """
     diameter_m = diameter_in * 0.0254
     area = math.pi * (diameter_m / 2.0) ** 2
 
-    # Ideal induced power
     p_i = induced_power(thrust_n, area, fuzz, rho)
 
-    # Base figure of merit vs diameter
     fm_base = _fm_for_diameter(diameter_in) if figure_of_merit is None else figure_of_merit
     fm = max(fm_base * fuzz.figure_of_merit_multiplier, 0.1)
 
-    # FM dropoff at high thrust (stronger)
     thrust_ratio = thrust_n / (thrust_n + 15.0)
-    fm_drop = 1.0 - 0.65 * (thrust_ratio ** 1.7)   # was 0.45 * r^1.3
-    fm *= fm_drop
+    fm *= 1.0 - 0.65 * (thrust_ratio ** 1.7)
 
-
-    # Induced power corrected by FM
     power = p_i / fm
 
-    # --- PROFILE DRAG TERM: ONLY BIG AT HIGH THRUST ---
-    # Small near hover, ramps hard toward full throttle.
-    k_profile = 1.0
-    drag_scale = thrust_ratio ** 3  # ~0 at hover, ~1 at full send
-    p_profile = k_profile * drag_scale * (thrust_n ** (4/3)) * diameter_in
+    drag_scale = thrust_ratio ** 3
+    p_profile = drag_scale * (thrust_n ** (4/3)) * diameter_in
     power += p_profile
 
-    # Global non-ideal losses (back off a bit)
-    base_loss_factor = 1.25
-    power *= base_loss_factor
-
-    return power
-
-
-
-
-
+    return power * 1.25  # Global losses
 
 
 # ============================================================
@@ -268,27 +340,30 @@ def prop_power_from_thrust(
 # ============================================================
 
 def motor_back_emf_constant(kv_rpm_per_v: float) -> float:
+    """Return motor back‑EMF constant (V per rad/s)."""
     return 60.0 / (2 * pi * kv_rpm_per_v) if kv_rpm_per_v > 0 else 0.0
 
 
 def motor_torque_constant(kv_rpm_per_v: float, fuzz: Fuzz) -> float:
+    """Return torque constant Kt (Nm/A)."""
     return motor_back_emf_constant(kv_rpm_per_v) * fuzz.motor_torque_multiplier
 
 
 def motor_current_for_torque(torque_nm: float, kv_rpm_per_v: float,
                              fuzz: Fuzz, no_load_current_a: float = 0.0) -> float:
+    """
+    Compute motor current required to generate a given torque.
+    """
     kt = motor_torque_constant(kv_rpm_per_v, fuzz)
     return torque_nm / max(kt, 1e-9) + no_load_current_a
 
 
 def motor_output_power(input_power_w: float, load_fraction: float, fuzz: Fuzz) -> float:
     """
-    Apply a simple efficiency curve to electrical input power.
-    Not currently used in engine, but available if needed.
+    Apply motor efficiency curve to electrical input power.
     """
     eff_curve = _motor_efficiency_for_load(load_fraction)
-    eff = eff_curve * fuzz.motor_efficiency_multiplier
-    eff = max(0.3, min(0.98, eff))
+    eff = max(0.3, min(0.98, eff_curve * fuzz.motor_efficiency_multiplier))
     return input_power_w * eff
 
 
@@ -297,26 +372,32 @@ def motor_output_power(input_power_w: float, load_fraction: float, fuzz: Fuzz) -
 # ============================================================
 
 def pack_voltage_nominal(cells_series: int, chem: BatteryChemistry) -> float:
+    """Nominal pack voltage."""
     return cells_series * chem.nominal_cell_voltage
 
 
 def pack_voltage_full(cells_series: int, chem: BatteryChemistry) -> float:
+    """Full‑charge pack voltage."""
     return cells_series * chem.full_cell_voltage
 
 
 def pack_internal_resistance(cells_series: int, chem: BatteryChemistry, fuzz: Fuzz) -> float:
+    """Total pack internal resistance."""
     return cells_series * chem.internal_resistance_per_cell_ohm * fuzz.battery_ir_multiplier
 
 
 def voltage_sag_under_load(v_oc: float, current_a: float, r_internal: float) -> float:
+    """Compute voltage sag under load."""
     return v_oc - current_a * r_internal
 
 
 def energy_wh_from_capacity(capacity_mah: float, nominal_voltage_v: float) -> float:
+    """Convert mAh + V into watt‑hours."""
     return (capacity_mah / 1000.0) * nominal_voltage_v
 
 
 def ideal_flight_time_minutes(energy_wh: float, avg_power_w: float) -> float:
+    """Ideal flight time in minutes."""
     return (energy_wh / avg_power_w) * 60.0 if avg_power_w > 0 else 0.0
 
 
@@ -325,22 +406,31 @@ def ideal_flight_time_minutes(energy_wh: float, avg_power_w: float) -> float:
 # ============================================================
 
 def copper_loss(i: float, r: float) -> float:
+    """Copper (I²R) loss."""
     return i * i * r
 
 
 def esc_loss(current_a: float, r_mosfet: float, fuzz: Fuzz,
              switching_loss_w: float = 0.5) -> float:
+    """
+    ESC conduction + switching losses.
+    """
     conduction = current_a * current_a * r_mosfet
     return (conduction + switching_loss_w) * fuzz.esc_loss_multiplier
 
 
 def steady_state_temp_rise(power_loss_w: float, thermal_resistance_c_per_w: float,
                            fuzz: Fuzz) -> float:
+    """Steady‑state temperature rise (°C)."""
     return power_loss_w * thermal_resistance_c_per_w * fuzz.thermal_resistance_multiplier
 
 
 def transient_temp_rise(power_loss_w: float, thermal_model: ThermalModel,
                         fuzz: Fuzz, time_s: float) -> float:
+    """
+    First‑order thermal transient:
+    ΔT(t) = ΔT_ss * (1 - e^(-t/τ))
+    """
     delta_ss = steady_state_temp_rise(
         power_loss_w, thermal_model.thermal_resistance_c_per_w, fuzz
     )

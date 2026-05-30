@@ -1,4 +1,28 @@
-# build_kwad.py
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 David Martinez
+
+"""
+build_kwad.py — Simulation Engine Component Builder
+===================================================
+
+This module constructs:
+
+    - A fully populated `Kwad` object (from basekwad.py)
+    - A `Fuzz` object (from physics.py)
+
+based on a configuration dictionary provided by the UI layer (e.g., Streamlit).
+
+This file contains **no physics, no performance logic, and no assumptions**
+beyond mapping UI inputs into structured dataclasses. All computation is handled
+in:
+
+    - physics.py  (low‑level physics)
+    - engine.py   (system‑level performance)
+
+
+All field names and object structures must remain stable — other modules depend
+on these exact dataclasses.
+"""
 
 import physics as phys
 from basekwad import (
@@ -9,8 +33,21 @@ from basekwad import (
 
 def build_kwad_and_fuzz(cfg):
     """
-    Build the Kwad object and Fuzz object from the UI config.
-    This keeps streamlitapp.py clean and modular.
+    Construct a `Kwad` object and a `Fuzz` object from a configuration dictionary.
+
+    Parameters:
+        cfg (dict): A configuration dictionary containing all user‑selected
+                    component parameters and fuzz multipliers.
+
+    Returns:
+        tuple:
+            - Kwad: Fully assembled quadcopter object.
+            - Fuzz: Global physics multipliers for tuning realism.
+
+    Notes:
+        - This function performs *no physics*.
+        - All values are passed directly into dataclasses.
+        - The UI layer is responsible for validating cfg values.
     """
 
     # ---------------------------------------------------------
@@ -33,8 +70,8 @@ def build_kwad_and_fuzz(cfg):
             kv_rpm_per_v=cfg["motor_kv"],
             stator_size=f"{int(cfg['motor_stator_d'])}{int(cfg['motor_stator_h'])}",
             weight_g=cfg["motor_weight"],
-            resistance_ohm=0.05,
-            no_load_current_a=1.0,
+            resistance_ohm=0.05,          # Default placeholder; physics.py handles realism
+            no_load_current_a=1.0,        # Typical small BLDC no‑load current
             max_current_a=cfg["motor_current_rating"],
         )
         for _ in range(cfg["motor_count"])
@@ -113,7 +150,7 @@ def build_kwad_and_fuzz(cfg):
     )
 
     # ---------------------------------------------------------
-    # Action Cam
+    # Action Cam (optional)
     # ---------------------------------------------------------
     action_cam = None
     if cfg["cam_weight"] > 0:
@@ -138,7 +175,7 @@ def build_kwad_and_fuzz(cfg):
         name="User Kwad",
         frame=frame,
         motors=motors,
-        props=[prop] * len(motors),
+        props=[prop] * len(motors),  # One prop per motor
         esc=esc,
         fc=fc,
         vtx=vtx,

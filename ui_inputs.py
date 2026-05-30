@@ -15,8 +15,8 @@ DEFAULT_5IN = {
 
     # Motor (2207/2208 class, 1950–2100 KV)
     "motor_kv": 1950,
-    "motor_stator_d": 22,
-    "motor_stator_h": 7,
+    "motor_stator_d": 23,
+    "motor_stator_h": 6,
     "motor_current_rating": 48,  # realistic burst rating
     "motor_weight": 34,          # g incl. wires
 
@@ -34,9 +34,9 @@ DEFAULT_5IN = {
     "frame_weight": 160,         # g, typical 5" freestyle frame
 
     # FC / ESC
-    "fc_loop": 1000,
+    "fc_loop": 4000,
     "fc_cpu": 60,
-    "fc_dshot": 600,
+    "fc_dshot": 300,
     "fc_weight": 8,
     "esc_current_rating": 45,
 
@@ -47,11 +47,11 @@ DEFAULT_5IN = {
 
     # Video (digital)
     "video_power": 8,            # W draw (O3 ~9W, WS ~5W)
-    "video_weight": 30,
+    "video_weight": 50,
     "video_digital": True,
 
     # RX
-    "rx_weight": 6,
+    "rx_weight": 10,
     "rx_elrs": True,
 
     # Camera (action cam = payload, so default = 0)
