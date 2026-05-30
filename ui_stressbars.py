@@ -29,7 +29,7 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
     st.subheader("Thermal & Reliability Stress")
 
     # ---------------------------------------------------------
-    # Extract live values from kwad/perf instead of cfg[]
+    # Extract live values from kwad/perf
     # ---------------------------------------------------------
 
     motor_count = len(kwad.motors) if kwad.motors else 0
@@ -38,21 +38,22 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
     battery = kwad.battery
     props = kwad.props[0] if kwad.props else None
 
-    # FC values (from kwad.fc)
-    fc_loop = getattr(kwad.fc, "loop_rate_hz", 2000)      # fallback if not defined
-    fc_dshot = getattr(kwad.fc, "dshot_rate", 600)        # fallback
-    frame_noise = getattr(kwad.frame, "noise_factor", 10) # fallback
+    # FC values
+    fc_loop = getattr(kwad.fc, "loop_rate_hz", 2000)
+    fc_dshot = getattr(kwad.fc, "dshot_rate", 600)
+    frame_noise = getattr(kwad.frame, "noise_factor", 10)
+    fc_cpu = getattr(kwad.fc, "cpu_load_pct", None)  # NEW
 
-    # ESC config (from kwad.esc)
+    # ESC config
     esc_timing = getattr(esc, "timing", "med")
     esc_pwm = getattr(esc, "pwm_rate_hz", 48000)
     esc_demag = getattr(esc, "demag", "med")
 
-    # Prop values
+    # Props
     prop_diameter = props.diameter_in if props else 5.1
     prop_pitch = props.pitch_in if props else 4.3
 
-    # Battery health (from cfg because it's user input)
+    # Battery health (user input)
     lipo_health = cfg.get("lipo_health", 100)
 
     # ---------------------------------------------------------
@@ -67,7 +68,7 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
     sag_race_pct = (v_full - v_sag_race) / v_full if v_full > 0 else 0.0
 
     # =========================================================
-    # FC STRESS
+    # FC STRESS (CPU load dominates)
     # =========================================================
 
     loop_factor = fc_loop / 4000.0
@@ -76,12 +77,18 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
     motor_factor = motor_count / 4.0 if motor_count > 0 else 0.0
 
     fc_stress = (
-        0.40 * loop_factor +
-        0.20 * dshot_factor +
-        0.20 * noise_factor +
-        0.20 * motor_factor
+        0.25 * loop_factor +
+        0.15 * dshot_factor +
+        0.15 * noise_factor +
+        0.15 * motor_factor
     )
 
+    # CPU load dominates if available
+    if fc_cpu is not None:
+        cpu_factor = clamp01(fc_cpu / 100.0)
+        fc_stress = 0.6 * cpu_factor + 0.4 * fc_stress
+
+    # Load influence
     if hover_current > 0:
         load_factor = min(racing_current / hover_current, 3.0)
         fc_stress *= (0.8 + 0.2 * load_factor)
@@ -89,7 +96,7 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
     fc_stress = clamp01(fc_stress)
 
     # =========================================================
-    # ESC STRESS
+    # ESC STRESS (battery health penalty added)
     # =========================================================
 
     timing_factor = {"low": 0.9, "med": 1.0, "high": 1.1}.get(esc_timing, 1.0)
@@ -97,7 +104,11 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
 
     esc_safe = esc.continuous_current_a * 0.8
     esc_stress = (racing_current_per_motor / esc_safe)
-    esc_stress *= timing_factor * pwm_factor
+
+    # Battery health penalty (NEW)
+    health_penalty = 1.0 + (1.0 - (lipo_health / 100.0)) * 0.5
+    esc_stress *= timing_factor * pwm_factor * health_penalty
+
     esc_stress = clamp01(esc_stress)
 
     # =========================================================
@@ -150,11 +161,17 @@ def render_stress_bars(cfg, kwad, perf, fuzz, v_full, r_pack, hover_current):
     batt_stress = clamp01(batt_stress)
 
     # =========================================================
-    # OVERALL STRESS (2nd highest)
+    # OVERALL STRESS (ignore Desync unless highest)
     # =========================================================
 
-    stress_list = [fc_stress, esc_stress, motor_stress, desync_stress, batt_stress]
-    overall_stress = sorted(stress_list)[-2]
+    base_list = [fc_stress, esc_stress, motor_stress, batt_stress]
+    base_overall = sorted(base_list)[-2]  # 2nd highest
+
+    if desync_stress > base_overall:
+        overall_stress = desync_stress
+    else:
+        overall_stress = base_overall
+
     overall_stress = clamp01(overall_stress)
 
     # =========================================================
