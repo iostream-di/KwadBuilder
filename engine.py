@@ -92,10 +92,6 @@ def hover_thrust_required(kwad: Kwad) -> float:
 
 
 def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
-    """
-    Solve for hover throttle by matching thrust per motor to required hover thrust,
-    using the nonlinear throttle→RPM mapping and the upgraded prop model.
-    """
     thrust_needed = hover_thrust_required(kwad)
     thrust_per_motor = thrust_needed / len(kwad.motors)
 
@@ -106,10 +102,18 @@ def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
     pitch_in = prop.pitch_in
     blades = getattr(prop, "blades", 2)
 
+    r_internal = phys.pack_internal_resistance(
+        kwad.battery.cells_series, kwad.battery.chemistry, fuzz
+    )
+
     lo, hi = 0.0, 1.0
-    for _ in range(20):
+    for _ in range(25):
         mid = 0.5 * (lo + hi)
+
+        # First estimate RPM at open-circuit voltage
         rpm = phys.throttle_to_rpm(mid, motor.kv_rpm_per_v, voltage_v)
+
+        # Estimate thrust
         thrust = phys.static_thrust_simple(
             rpm=rpm,
             diameter_in=diameter_in,
@@ -118,13 +122,34 @@ def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
             fuzz=fuzz,
         )
 
-        if thrust > thrust_per_motor:
+        # Estimate current from thrust
+        current_per_motor = motor_current_from_thrust(
+            motor, prop, rpm, thrust, fuzz
+        )
+        total_current = current_per_motor * len(kwad.motors)
+
+        # Apply sag
+        v_loaded = phys.voltage_sag_under_load(voltage_v, total_current, r_internal)
+
+        # Recompute RPM at sagged voltage
+        rpm_loaded = phys.throttle_to_rpm(mid, motor.kv_rpm_per_v, v_loaded)
+
+        # Recompute thrust at sagged voltage
+        thrust_loaded = phys.static_thrust_simple(
+            rpm=rpm_loaded,
+            diameter_in=diameter_in,
+            pitch_in=pitch_in,
+            blades=blades,
+            fuzz=fuzz,
+        )
+
+        if thrust_loaded > thrust_per_motor:
             hi = mid
         else:
             lo = mid
 
-    ht = 0.5 * (lo + hi)
-    return max(0.0, min(1.0, ht))
+    return 0.5 * (lo + hi)
+
 
 
 # ============================================================
