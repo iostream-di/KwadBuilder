@@ -137,6 +137,16 @@ def render_metrics(cfg, kwad, perf, fuzz):
     standard_voltages = [16, 25, 35, 50, 63]
     cap_voltage_rating = next((v for v in standard_voltages if v >= cap_voltage_required), 63)
 
+    # Dry Weight
+    dry_weight_g = auw_g - kwad.battery.weight_g
+
+    # Max Prop Load (per motor)
+    motor_count = len(kwad.motors)
+    max_prop_load_g = max_thrust_g / motor_count if motor_count > 0 else 0.0
+
+    # Max RPM
+    max_rpm = kwad.motors[0].kv_rpm_per_v * v_full * 0.9
+
 
     # ---------------------------------------------------------
     # Render Metrics
@@ -145,15 +155,17 @@ def render_metrics(cfg, kwad, perf, fuzz):
     col1, col2 = st.columns(2)
 
     with col1:
-        st.metric("AUW", f"{auw_g:.0f} g")
+        st.metric("Dry Weight", f"{dry_weight_g:.0f} g")
         st.metric("Max Payload", f"{max_payload_g:.0f} g")
+        st.metric("AUW", f"{auw_g:.0f} g")
         st.metric("Max Thrust", f"{max_thrust_g:.0f} g")
+        st.metric("Max RPM", f"{max_rpm:.0f} RPM")
         st.metric("Max Acceleration", f"{max_accel_g:.2f} G")
         st.metric("Max Speed", f"{max_speed_mph:.0f} mph")
         st.metric("TWR", f"{twr:.2f} : 1")
         st.metric("Hover Throttle", f"{perf.hover_throttle:.2f}")
-        st.metric("Max Sag (FT)", f"{sag_ft_pct * 100:.1f} %")
-
+        st.metric("Max Prop Load", f"{max_prop_load_g:.0f} g/motor")
+        
     with col2:
         st.metric("Hover Power", f"{hover_power:.0f} W")
         st.metric("High Power", f"{high_power:.0f} W")
@@ -161,6 +173,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
         st.metric("High Current", f"{high_current:.1f} A")
         st.metric("Max Current", f"{max_current:.1f} A")
         st.metric("Voltage Sag (Hover)", f"{sag_pct * 100:.1f} %")
+        st.metric("Max Voltage Sag", f"{sag_ft_pct * 100:.1f} %")
         st.metric("Battery Warning Voltage", f"{v_warn:.2f} V")
         st.metric("Battery Land Voltage", f"{v_land:.2f} V")
         st.metric("Capacitor Required (Low ESR)", f"{cap_required_uf:.0f} µF @ {cap_voltage_rating} V")
