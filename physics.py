@@ -150,23 +150,45 @@ def static_thrust_simple(
     Diameter-aware static thrust model.
     Tuned for realistic 5" thrust and scaled for other sizes.
     """
+    # Defensive typing / clamping
+    rpm = max(0.0, float(rpm))
+    diameter_in = float(diameter_in)
+    pitch_in = float(pitch_in)
+    blades = int(blades)
+    rho = float(rho)
+
     diameter_m = diameter_in * 0.0254
     pitch_m = pitch_in * 0.0254
+
+    # Clamp diameter to avoid degenerate areas
+    if diameter_m <= 0.0:
+        return 0.0
+
+    # Rev/s
     n = rpm / 60.0
 
     base_ct = _ct_base_for_diameter(diameter_in)
 
-    p_over_d = pitch_m / max(diameter_m, 1e-6)
+    p_over_d = pitch_m / diameter_m
+    p_over_d = max(0.1, p_over_d)  # avoid crazy exponents
+
     # Slightly stronger pitch influence
     ct_pitch = base_ct * (p_over_d ** 0.7)
 
     # Stronger blade factor: 3-blade gives noticeably more thrust
     blade_factor = 1.0 + 0.18 * (blades - 2)
 
-    ct = ct_pitch * blade_factor * fuzz.prop_thrust_multiplier * fuzz.thrust_coefficient_multiplier
+    ct = (
+        ct_pitch
+        * blade_factor
+        * fuzz.prop_thrust_multiplier
+        * fuzz.thrust_coefficient_multiplier
+    )
 
-    thrust_n = ct * rho * (n ** 2) * (diameter_m ** 4)
-    return thrust_n
+    # Use explicit multiplications to avoid any weirdness around ** on bad types
+    thrust_n = ct * rho * (n * n) * (diameter_m ** 4)
+    return float(thrust_n)
+
 
 
 def induced_power(thrust_n: float, disk_area_m2: float, fuzz: Fuzz,
