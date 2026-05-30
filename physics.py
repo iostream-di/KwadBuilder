@@ -244,12 +244,14 @@ def prop_power_from_thrust(
     power = p_i / fm
 
     # --- PROFILE DRAG TERM (CRITICAL) ---
-    k_profile = 0.18
-    p_profile = k_profile * (thrust_n ** (2/3)) * diameter_in
+    # Profile drag grows strongly with RPM (∝ thrust^(4/3))
+    k_profile = 0.025  # tuned for 5" tri-blades
+    p_profile = k_profile * (thrust_n ** (4/3)) * diameter_in
     power += p_profile
 
+
     # Global non-ideal losses
-    base_loss_factor = 1.80
+    base_loss_factor = 1.60
     power *= base_loss_factor
 
     return power
