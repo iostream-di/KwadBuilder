@@ -27,36 +27,35 @@ def render_theory_section():
 
         st.latex(r"V_{tip} = \pi D \frac{RPM}{60}")
 
-        st.markdown("### Step 3 — Relate tip speed to Mach number")
+                st.markdown("### Step 3 — Estimate Target Prop Tip Mach")
 
         st.write("""
-        We assume the propeller operates near 70% of the speed of sound:
+        Small props and large props do not appear to operate at the same
+        optimal tip Mach number.
+
+        Community-tested builds suggest that target tip Mach increases
+        gradually with prop diameter and approaches approximately 0.70
+        for larger aircraft.
         """)
 
-        st.latex(r"V_{tip} = M \cdot a")
+        st.latex(
+            r"M(D)=0.45+0.25\left(1-e^{-0.4(D-2)}\right)"
+        )
 
         st.write("""
         Where:
 
-        - M = 0.70 (target Mach fraction)
-        - a = 343 m/s (speed of sound at sea level)
+        - D = prop diameter in inches
+        - M(D) = estimated optimal tip Mach fraction
         """)
 
         st.markdown("### Step 4 — Relate RPM to Motor KV")
 
-        st.write("""
-        Motor RPM can be approximated as:
-        """)
-
-        st.latex(r"RPM = KV \cdot V \cdot \eta")
+        st.latex(
+            r"RPM = KV \cdot V \cdot \eta"
+        )
 
         st.write("""
-        Where:
-
-        - KV = motor constant (RPM/V)
-        - V = battery voltage under load
-        - η = loaded RPM factor
-
         For this model:
 
         - η = 0.90
@@ -64,105 +63,117 @@ def render_theory_section():
 
         st.markdown("### Step 5 — Solve for KV")
 
-        st.write("""
-        Combining the equations gives:
-        """)
-
         st.latex(
-            r"KV = \frac{60 M a}{\pi D V \eta}"
+            r"KV = \frac{60\,M(D)\,a}{\pi D V \eta}"
         )
 
         st.write("""
         Substituting:
 
-        - M = 0.70
         - a = 343 m/s
         - η = 0.90
+        - D in inches
 
-        and converting diameter to inches yields:
+        yields:
         """)
 
         st.latex(
-            r"KV \approx \frac{229289}{D_{in} \cdot V}"
+            r"KV \approx \frac{327555 \cdot M(D)}{D_{in}\cdot V}"
         )
 
         st.markdown("### Final Formula")
 
         st.success(
-            "KV ≈ 229289 / (Prop Diameter in Inches × Battery Voltage)"
+            "KV ≈ (327555 × M(D)) / (Prop Diameter × Battery Voltage)"
         )
 
         st.latex(
-            r"KV \approx \frac{229289}{D_{in} \cdot V}"
+            r"KV \approx \frac{327555 \cdot M(D)}{D_{in}\cdot V}"
         )
 
         st.markdown("### Example Calculations")
 
-        st.write("**5 inch prop on 6S (22.2V nominal)**")
+        st.write("**2 inch prop on 1S (3.8V nominal)**")
 
         st.latex(
-            r"KV = \frac{229289}{5 \cdot 22.2}"
+            r"M(2)=0.45"
         )
 
         st.latex(
-            r"KV \approx 2066"
+            r"KV=\frac{327555\times0.45}{2\times3.8}"
+        )
+
+        st.latex(
+            r"KV\approx19,392"
+        )
+
+        st.write("**5 inch prop on 6S (22.2V nominal)**")
+
+        st.latex(
+            r"M(5)\approx0.625"
+        )
+
+        st.latex(
+            r"KV=\frac{327555\times0.625}{5\times22.2}"
+        )
+
+        st.latex(
+            r"KV\approx1,844"
         )
 
         st.write("**7 inch prop on 6S (22.2V nominal)**")
 
         st.latex(
-            r"KV = \frac{229289}{7 \cdot 22.2}"
+            r"M(7)\approx0.683"
         )
 
         st.latex(
-            r"KV \approx 1476"
+            r"KV=\frac{327555\times0.683}{7\times22.2}"
+        )
+
+        st.latex(
+            r"KV\approx1,437"
         )
 
         st.write("**10 inch prop on 6S (22.2V nominal)**")
 
         st.latex(
-            r"KV = \frac{229289}{10 \cdot 22.2}"
+            r"M(10)\approx0.690"
         )
 
         st.latex(
-            r"KV \approx 1033"
+            r"KV=\frac{327555\times0.690}{10\times22.2}"
+        )
+
+        st.latex(
+            r"KV\approx1,019"
         )
 
         st.write("**15 inch prop on 12S (44.4V nominal)**")
 
         st.latex(
-            r"KV = \frac{229289}{15 \cdot 44.4}"
+            r"M(15)\approx0.698"
         )
 
         st.latex(
-            r"KV \approx 344"
+            r"KV=\frac{327555\times0.698}{15\times44.4}"
+        )
+
+        st.latex(
+            r"KV\approx344"
         )
 
         st.markdown("### Why It Works")
 
         st.write("""
-        Rearranging the equation shows:
+        Rather than assuming all drones operate at the same prop tip Mach
+        number, this model adjusts the target Mach based on prop size.
 
-        KV × Diameter × Voltage ≈ Constant
+        Tiny whoops generally operate at lower tip Mach values, while
+        larger aircraft gradually converge toward approximately 0.70 Mach.
 
-        This means that when propeller diameter increases, motor KV should
-        decrease proportionally. Likewise, increasing battery voltage allows
-        lower-KV motors to reach the same effective tip speed.
-
-        This relationship appears repeatedly across successful FPV drone
-        designs, from 65 mm tiny whoops to large cinematic and heavy-lift
-        aircraft.
-        """)
-
-        st.latex(
-            r"KV \cdot D_{in} \cdot V \approx 229289"
-        )
-
-        st.info("""
-        This formula is intended as a first-order sizing rule rather than a
-        strict engineering limit. Prop pitch, motor efficiency, aircraft
-        weight, desired throttle authority, battery sag, and flight style
-        can all influence the final KV choice.
+        This produces KV recommendations that better align with successful
+        community builds across a much wider range of aircraft sizes.
         """)
 
         st.markdown("## Marty's Stator Diameter & Height Formula")
