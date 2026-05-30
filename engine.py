@@ -48,8 +48,10 @@ def auw_kg(kwad: Kwad) -> float:
 # ============================================================
 
 def static_thrust(motor: Motor, prop: Propeller, voltage_v: float, fuzz: phys.Fuzz) -> float:
+    # Theoretical no-load RPM, clamp to ~90% physical max
+    max_rpm = motor.kv_rpm_per_v * voltage_v * 0.90
     rpm = phys.throttle_to_rpm(1.0, motor.kv_rpm_per_v, voltage_v)
-    rpm = min(rpm, 120_000.0)
+    rpm = min(rpm, max_rpm)
 
     return phys.static_thrust_simple(
         rpm=rpm,
@@ -74,11 +76,14 @@ def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
     motor = kwad.motors[0]
     prop = kwad.props[0]
 
+    # KV-aware physical RPM limit for this motor/voltage
+    max_rpm = motor.kv_rpm_per_v * voltage_v * 0.90
+
     lo, hi = 0.0, 1.0
     for _ in range(25):
         mid = (lo + hi) * 0.5
         rpm = phys.throttle_to_rpm(mid, motor.kv_rpm_per_v, voltage_v)
-        rpm = min(rpm, 120_000.0)
+        rpm = min(rpm, max_rpm)
 
         thrust = phys.static_thrust_simple(
             rpm=rpm,
@@ -183,9 +188,21 @@ def full_throttle_performance(kwad: Kwad, fuzz: phys.Fuzz) -> tuple[float, float
     v_loaded = v_full
     total_current = 0.0
 
+    # KV-aware RPM limit at full voltage
+    max_rpm_full = motor.kv_rpm_per_v * v_full * 0.90
+
     for _ in range(12):
         # Thrust per motor at full throttle and current loaded voltage
-        thrust_per_motor = static_thrust(motor, prop, v_loaded, fuzz)
+        rpm = phys.throttle_to_rpm(1.0, motor.kv_rpm_per_v, v_loaded)
+        rpm = min(rpm, max_rpm_full)
+
+        thrust_per_motor = phys.static_thrust_simple(
+            rpm=rpm,
+            diameter_in=prop.diameter_in,
+            pitch_in=prop.pitch_in,
+            blades=getattr(prop, "blades", 2),
+            fuzz=fuzz,
+        )
 
         # Current per motor from that thrust at this voltage
         current_per_motor = motor_current_from_thrust(
