@@ -166,7 +166,7 @@ def render_metrics(cfg, kwad, perf, fuzz):
     motor_count = len(kwad.motors)
     max_prop_load_g = max_thrust_g / motor_count if motor_count > 0 else 0.0
 
-    max_rpm = kwad.motors[0].kv_rpm_per_v * v_full * 0.9
+    max_rpm = kwad.motors[0].kv_rpm_per_v * v_full * 0.75
 
     # ---------------------------------------------------------
     # Render Metrics
