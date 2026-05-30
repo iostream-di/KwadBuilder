@@ -170,6 +170,16 @@ def static_thrust_simple(
 
     ct = ct_pitch * blade_factor * fuzz.prop_thrust_multiplier
 
+    # Tip Mach / high-RPM CT dropoff
+    # n is rev/sec, diameter_m is meters
+    tip_speed = pi * diameter_m * n
+    mach = tip_speed / 343.0  # speed of sound
+
+    # Reduce CT as Mach approaches 0.7–0.9
+    mach_factor = 1.0 / (1.0 + 3.0 * max(mach - 0.6, 0.0))
+    ct *= mach_factor
+
+
     thrust_n = ct * rho * (n ** 2) * (diameter_m ** 4)
     return thrust_n
 
