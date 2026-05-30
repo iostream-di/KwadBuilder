@@ -57,7 +57,7 @@ LIPO_DEFAULT = BatteryChemistry(
     nominal_cell_voltage=3.7,
     full_cell_voltage=4.2,
     empty_cell_voltage=3.3,
-    internal_resistance_per_cell_ohm=0.0012,
+    internal_resistance_per_cell_ohm=0.012,
 )
 
 
