@@ -235,27 +235,29 @@ def prop_power_from_thrust(
     fm_base = _fm_for_diameter(diameter_in) if figure_of_merit is None else figure_of_merit
     fm = max(fm_base * fuzz.figure_of_merit_multiplier, 0.1)
 
-    # FM dropoff at high thrust (stronger)
+    # FM dropoff at high thrust (your stronger version)
     thrust_ratio = thrust_n / (thrust_n + 15.0)
-    fm_drop = 1.0 - 0.65 * (thrust_ratio ** 1.7)   # was 0.45 * r^1.3
+    fm_drop = 1.0 - 0.65 * (thrust_ratio ** 1.7)
     fm *= fm_drop
-
 
     # Induced power corrected by FM
     power = p_i / fm
 
-    # --- PROFILE DRAG TERM: ONLY BIG AT HIGH THRUST ---
-    # Small near hover, ramps hard toward full throttle.
-    k_profile = 0.5
-    drag_scale = thrust_ratio ** 3  # ~0 at hover, ~1 at full send
+    # Profile drag (keep it moderate; it’s doing its job)
+    k_profile = 1.0
+    drag_scale = thrust_ratio ** 3
     p_profile = k_profile * drag_scale * (thrust_n ** (4/3)) * diameter_in
     power += p_profile
 
-    # Global non-ideal losses (back off a bit)
-    base_loss_factor = 1.55
-    power *= base_loss_factor
+    # --- THRUST-DEPENDENT GLOBAL LOSSES ---
+    # Low at hover, high at full send.
+    base_loss = 1.35          # gentle at low thrust
+    high_loss = 2.05          # strong at high thrust
+    loss_factor = base_loss + (high_loss - base_loss) * (thrust_ratio ** 2)
+    power *= loss_factor
 
     return power
+
 
 
 
