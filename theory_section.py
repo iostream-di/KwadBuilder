@@ -27,7 +27,7 @@ def render_theory_section():
 
         st.latex(r"V_{tip} = \pi D \frac{RPM}{60}")
 
-                st.markdown("### Step 3 — Estimate Target Prop Tip Mach")
+        st.markdown("### Step 3 — Estimate Target Prop Tip Mach")
 
         st.write("""
         Small props and large props do not appear to operate at the same
