@@ -254,13 +254,13 @@ def prop_power_from_thrust(
     if thrust_n > 0 and area > 0:
         disk_loading = thrust_n / area  # N/m^2
 
-        # Typical 5" hover loading: ~120–150 N/m^2
-        # Start penalizing above ~200 N/m^2
-        if disk_loading > 200:
-            # Smooth exponential penalty
-            excess = (disk_loading - 200) / 200
-            high_load_factor = 1.0 + 0.35 * (excess ** 1.2)
+        # Start penalizing above ~220 N/m^2 (just above hover)
+        if disk_loading > 220:
+            excess = (disk_loading - 220) / 220
+            # Gentler curve and lower cap
+            high_load_factor = 1.0 + 0.20 * (excess ** 1.1)
             power *= high_load_factor
+
 
     return power
 
