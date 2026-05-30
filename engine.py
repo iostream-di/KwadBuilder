@@ -34,6 +34,157 @@ from basekwad import (
     Kwad, Motor, Propeller, Battery, ESC, FlightController, VTX
 )
 
+# ============================================================
+# Marty's KV Formula
+# ============================================================
+import math
+def marty_kv(prop_diameter_in, battery_voltage):
+    """
+    Estimate motor KV from prop diameter and battery voltage.
+
+    Parameters
+    ----------
+    prop_diameter_in : float
+        Propeller diameter in inches.
+
+    battery_voltage : float
+        Battery voltage under load. For example:
+        - 1S ≈ 3.8V
+        - 2S ≈ 7.6V
+        - 4S ≈ 15.2V
+        - 6S ≈ 22.2V
+        - 12S ≈ 44.4V
+
+    Returns
+    -------
+    float
+        Estimated motor KV (RPM/V).
+    """
+
+    # Speed of sound at sea level (m/s)
+    speed_of_sound = 343.0
+
+    # Loaded RPM factor.
+    # Represents actual RPM as a fraction of unloaded KV × Voltage.
+    # Example:
+    #   2000KV motor on 22.2V theoretical = 44,400 RPM
+    #   At 90% efficiency under load     = 39,960 RPM
+    loaded_rpm_factor = 0.90
+
+    # Inches-to-meters conversion factor.
+    inches_to_meters = 0.0254
+
+    # Diameter-dependent target tip Mach model.
+    #
+    # This is an empirical fit intended to better match observed
+    # successful builds across multiple drone sizes.
+    #
+    # Small props appear to operate efficiently at lower tip Mach
+    # numbers than larger props.
+    target_mach = (
+        0.45
+        + 0.25
+        * (
+            1
+            - math.exp(
+                -0.4 * (prop_diameter_in - 2)
+            )
+        )
+    )
+
+    # Derived from:
+    #
+    #     KV = (60 * M * a) / (π * D * V * η)
+    #
+    # where:
+    #     M = target Mach fraction
+    #     a = speed of sound
+    #     D = prop diameter (meters)
+    #     V = battery voltage
+    #     η = loaded RPM factor
+    #
+    # Convert inches to meters before solving.
+    prop_diameter_m = prop_diameter_in * inches_to_meters
+
+    kv = (
+        60
+        * target_mach
+        * speed_of_sound
+    ) / (
+        math.pi
+        * prop_diameter_m
+        * battery_voltage
+        * loaded_rpm_factor
+    )
+
+    return kv
+
+
+def marty_load_index(
+    kv,
+    voltage,
+    stator_width_mm,
+    stator_height_mm,
+    prop_diameter_in,
+    prop_pitch_in,
+    blade_count,
+):
+    """
+    Relative motor load estimate.
+
+    Higher numbers indicate a harder-working motor.
+
+    Returns a dimensionless index intended for
+    comparison between builds.
+    """
+
+    rpm_term = (kv * voltage) ** 3
+
+    prop_term = (
+        prop_diameter_in ** 4
+        * prop_pitch_in
+        * blade_count
+    )
+
+    motor_term = (
+        stator_width_mm ** 2
+        * stator_height_mm
+    )
+
+    return (
+        rpm_term
+        * prop_term
+    ) / motor_term
+
+REFERENCE_LOAD = marty_load_index(
+    kv=1950,
+    voltage=22.2,
+    stator_width_mm=23,
+    stator_height_mm=6,
+    prop_diameter_in=5.1,
+    prop_pitch_in=4.3,
+    blade_count=3,
+)
+
+def marty_load_rating(load_index):
+    """
+    Human-readable interpretation.
+    """
+
+    if load_index < 1e12:
+        return "Very Light"
+
+    if load_index < 3e12:
+        return "Efficient"
+
+    if load_index < 6e12:
+        return "Aggressive"
+
+    if load_index < 1e13:
+        return "Racing"
+
+    return "Extremely Hot"
+
 
 # ============================================================
 # AUW (All-Up Weight) Calculation

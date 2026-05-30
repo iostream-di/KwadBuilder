@@ -223,87 +223,132 @@ def render_theory_section():
         adjust later based on flight style, efficiency goals, or weight constraints.
         """)
 
-        st.markdown("## Marty's Prop Load Index — Pitch, KV, Cells, Blades")
+        st.markdown("## Marty's Motor Load Index")
 
         st.write("""
-        This formula estimates how 'heavy' a prop feels electrically, combining:
-        - prop diameter
-        - prop pitch
-        - motor KV
-        - cell count
-        - blade count
+        The KV formula estimates a reasonable motor KV for a given prop size
+        and battery voltage.
 
-        The goal is to help choose a prop pitch that matches their intent
-        (gentle vs hot) without accidentally overloading the pack or ESC.
+        The Motor Load Index estimates how hard a specific motor and propeller
+        combination will work.
+
+        It is not intended to predict exact current draw. Instead, it provides
+        a relative comparison between builds.
+
+        Larger propellers, steeper pitch, more blades, higher KV, and higher
+        voltage all increase load. Larger stators reduce load.
         """)
 
-        st.markdown("### Step 1 — Inputs")
+        st.markdown("### Step 1 — Estimate Available Motor Torque")
+
         st.write("""
-        - **Dᵢₙ** = prop diameter in inches  
-        - **Pᵢₙ** = prop pitch in inches  
-        - **KV** = motor KV  
-        - **S** = cell count  
-        - **B** = blade count (2, 3, 4, …)  
+        A motor's ability to handle load scales approximately with stator
+        volume. For FPV outrunners, a useful approximation is:
         """)
 
-        st.markdown("### Step 2 — Reference Values")
-        st.write("""
-        These define a 'normal' 5\" freestyle baseline:
-        - **KV_ref** = 1800  
-        - **S_ref** = 6  
-        - **B_ref** = 3  (tri‑blade)
-        """)
-
-        st.markdown("### Step 3 — Prop Load Index Formula")
         st.latex(
-            r"PLI = \frac{P_{in}}{D_{in}}"
-            r"\cdot \frac{KV}{KV_{ref}}"
-            r"\cdot \frac{S}{S_{ref}}"
-            r"\cdot \frac{B}{B_{ref}}"
+            r"MotorCapability \propto W^2H"
         )
 
         st.write("""
-        This is a dimensionless load number:
-        - more pitch → higher PLI  
-        - more KV → higher PLI  
-        - more cells → higher PLI  
-        - more blades → higher PLI  
+        Where:
+
+        - W = stator width (mm)
+        - H = stator height (mm)
+
+        Larger stators can generally support more propeller load.
         """)
 
-        st.markdown("### Step 4 — How to Interpret PLI")
+        st.markdown("### Step 2 — Estimate Propeller Demand")
+
         st.write("""
-        - **PLI ≤ 0.8** → Gentle / easy on pack & ESC  
-        - **0.8 < PLI ≤ 1.0** → Normal / sporty  
-        - **1.0 < PLI ≤ 1.15** → Hot / aggressive  
-        - **PLI > 1.15** → High overload risk (only on purpose)  
+        Propeller power requirements increase rapidly with RPM and prop size.
+
+        A simplified approximation is:
         """)
 
-        st.markdown("### Example — 5\" on 6S, 1800KV, tri‑blade")
-        st.write("""
-        Here KV/KV_ref = 1, S/S_ref = 1, B/B_ref = 1, so PLI = Pᵢₙ / Dᵢₙ:
+        st.latex(
+            r"PropDemand \propto (KV \cdot V)^3 D^4 Pitch \cdot B"
+        )
 
-        - 5×3.6×3 → PLI = 0.72 → Gentle  
-        - 5×4.3×3 → PLI = 0.86 → Normal  
-        - 5×5.1×3 → PLI = 1.02 → Hot  
-        - 5×5.5×3 → PLI = 1.10 → Upper hot, near limit  
+        st.write("""
+        Where:
+
+        - KV = motor KV
+        - V = battery voltage
+        - D = prop diameter (inches)
+        - Pitch = prop pitch (inches)
+        - B = blade count
+
+        Larger diameter, more pitch, more blades, and higher RPM all
+        increase the aerodynamic load placed on the motor.
         """)
 
-        st.markdown("### Example — 3\" on 3S, 5500KV, 1303.5")
-        st.write("""
-        - 3×1.6×2 → PLI ≈ 0.54 → Very gentle / super safe  
-        - 3×1.8×3 → PLI ≈ 0.92 → Sporty / normal load  
+        st.markdown("### Step 3 — Calculate Load Index")
 
-        Builders can use this to sanity‑check prop pitch and blade count choices
-        against their KV and cell count, before they buy props that are way too
-        heavy for their pack or ESC. Remember, as with motor KV, you can deviate 
-        to an extent. 
-        
-        - Going lower will run cooler and safer and longer. Top speed 
-        is exchanged for higher small area resolution. Great for navigating tight 
-        spaces, or smooth attitude changes, like cinematic flying or long range recon. 
-        - Going higher will run hotter, bleed the pack faster, and risk motor desyncs. 
-        Small throttle movements are more exaggerated. High pitch is ideal for aggressive 
-        freestyle and racing since you are getting the punch you need from the props.
+        st.write("""
+        Combining the motor capability and propeller demand terms yields:
+        """)
+
+        st.latex(
+            r"LoadIndex = \frac{(KV \cdot V)^3 D^4 Pitch \cdot B}{W^2H}"
+        )
+
+        st.markdown("### Final Formula")
+
+        st.success(
+            "LoadIndex = ((KV × Voltage)^3 × Diameter^4 × Pitch × Blades) / (Width² × Height)"
+        )
+
+        st.latex(
+            r"LoadIndex = \frac{(KV \cdot V)^3 D^4 Pitch \cdot B}{W^2H}"
+        )
+
+        st.markdown("### Example Calculation")
+
+        st.write("""
+        Example:
+
+        - Motor: 2207 1950KV
+        - Battery: 6S (22.2V)
+        - Prop: 5.1 × 4.8 × 3
+        """)
+
+        st.latex(
+            r"LoadIndex = \frac{(1950 \cdot 22.2)^3 \cdot 5.1^4 \cdot 4.8 \cdot 3}{22^2 \cdot 7}"
+        )
+
+        st.write("""
+        The resulting value is primarily useful when compared against
+        other builds rather than interpreted directly.
+        """)
+
+        st.markdown("### Suggested Interpretation")
+
+        st.write("""
+        If the Load Index is normalized against a known reference build:
+
+        - 0.5 = very lightly loaded
+        - 1.0 = typical freestyle load
+        - 2.0 = aggressive setup
+        - 3.0+ = very demanding setup
+
+        The normalized value is usually more useful than the raw index.
+        """)
+
+        st.markdown("### Why It Works")
+
+        st.write("""
+        Motor load tends to increase much faster than most pilots expect.
+
+        Increasing diameter, pitch, voltage, or KV causes load to rise
+        rapidly because propeller power requirements scale strongly with RPM.
+
+        Meanwhile, increasing stator size increases the motor's ability
+        to produce torque and dissipate heat.
+
+        This formula attempts to balance those competing effects into a
+        single comparison metric.
 
         These are the basic formulas I use on my own builds. They are mostly based on my own
         studies and community driven data. I am not an aerospace engineer. My strengths are 
