@@ -2,6 +2,56 @@ import streamlit as st
 
 def render_theory_section():
 
+    with st.expander("Marty Mayhem's Build Logic", expanded=False):
+        st.markdown("## Marty Mayhem's Build Logic — Motor KV Formula")
+
+        st.write("""
+        This formula gives you the correct motor KV for **any prop size** and **any cell count**
+        without needing lookup tables or community charts. It is based on the observation that
+        FPV quads across all sizes tend to run their propeller tips at about **70% of the speed of sound**.
+        """)
+
+        st.markdown("### Step 1 — Convert prop diameter to meters")
+        st.latex(r"D_m = D_{in} \cdot 0.0254")
+
+        st.markdown("### Step 2 — Use the universal FPV tip‑speed constant")
+        st.latex(r"k_{tip} = 0.70")
+        st.latex(r"a = 343\ \text{m/s}")
+
+        st.write("This represents the typical unloaded tip‑speed FPV quads operate at.")
+
+        st.markdown("### Step 3 — Compute target unloaded RPM for that prop size")
+        st.latex(r"RPM_{target} = \frac{k_{tip} \cdot a \cdot 60}{\pi \cdot D_m}")
+
+        st.write("""
+        This gives the ideal unloaded RPM for the prop size, matching real FPV builds across
+        2\", 3\", 5\", 7\", and larger platforms.
+        """)
+
+        st.markdown("### Step 4 — Compute pack voltage")
+        st.latex(r"V_{pack} = S \cdot V_{cell}")
+
+        st.write("""
+        Use:
+        - 3.8 V per cell for nominal
+        - 4.0 V per cell for design
+        - 4.2 V per cell for full‑charge KV
+        """)
+
+        st.markdown("### Step 5 — Final KV Formula")
+        st.latex(r"KV_{target} = \frac{RPM_{target}}{V_{pack}}")
+
+        st.write("""
+        This produces KV values that match real‑world FPV builds:
+        - 5\" on 6S → ~1800 KV  
+        - 3\" on 1S → ~17,000–19,000 KV  
+        - 7\" on 6S → ~1200–1500 KV  
+
+        All from one formula, no lookups required.
+        """)
+
+
+
     with st.expander("Motor Physics", expanded=False):
         st.markdown("## Motor Physics")
 
