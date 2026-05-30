@@ -66,6 +66,8 @@ def static_thrust(motor: Motor, prop: Propeller, voltage_v: float, fuzz: phys.Fu
     Static max thrust per motor using the diameter-aware prop model.
     """
     rpm = phys.throttle_to_rpm(1.0, motor.kv_rpm_per_v, voltage_v)
+    # Guard against absurd KV/voltage combos (tiny whoops, bad presets, etc.)
+    rpm = min(rpm, 120_000.0)
 
     diameter_in = prop.diameter_in
     pitch_in = prop.pitch_in
@@ -95,7 +97,11 @@ def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
     Uses open-circuit voltage; sag is handled in evaluate_kwad.
     """
     thrust_needed = hover_thrust_required(kwad)
-    thrust_per_motor = thrust_needed / len(kwad.motors)
+    motor_count = len(kwad.motors)
+    if motor_count <= 0:
+        return 0.0
+
+    thrust_per_motor = thrust_needed / motor_count
 
     motor = kwad.motors[0]
     prop = kwad.props[0]
@@ -109,6 +115,7 @@ def hover_throttle(kwad: Kwad, voltage_v: float, fuzz: phys.Fuzz) -> float:
         mid = 0.5 * (lo + hi)
 
         rpm = phys.throttle_to_rpm(mid, motor.kv_rpm_per_v, voltage_v)
+        rpm = min(rpm, 120_000.0)
 
         thrust = phys.static_thrust_simple(
             rpm=rpm,
@@ -181,7 +188,7 @@ def motor_current_from_thrust(
     kt = phys.motor_torque_constant(motor.kv_rpm_per_v, fuzz)
 
     current = torque / max(kt, 1e-9) + motor.no_load_current_a
-    return current
+    return max(current, 0.0)
 
 
 # ============================================================
@@ -239,7 +246,18 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
     h_throttle = hover_throttle(kwad, v_full, fuzz)
 
     thrust_needed = hover_thrust_required(kwad)
-    thrust_per_motor = thrust_needed / len(kwad.motors)
+    motor_count = len(kwad.motors)
+    if motor_count <= 0:
+        return KwadPerformance(
+            hover_throttle=0.0,
+            max_thrust_total_n=0.0,
+            total_power_hover_w=0.0,
+            flight_time_min=0.0,
+            motor_temp_rise_c=0.0,
+            esc_temp_rise_c=0.0,
+        )
+
+    thrust_per_motor = thrust_needed / motor_count
 
     motor = kwad.motors[0]
     prop = kwad.props[0]
@@ -255,6 +273,8 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
 
     for _ in range(8):
         rpm_hover = phys.throttle_to_rpm(h_throttle, motor.kv_rpm_per_v, v_loaded)
+        rpm_hover = min(rpm_hover, 120_000.0)
+
         current_per_motor = motor_current_from_thrust(
             motor,
             prop,
@@ -262,7 +282,7 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
             thrust_per_motor,
             fuzz,
         )
-        hover_current = current_per_motor * len(kwad.motors)
+        hover_current = current_per_motor * motor_count
 
         new_v_loaded = phys.voltage_sag_under_load(v_full, hover_current, r_internal)
 
@@ -284,7 +304,7 @@ def evaluate_kwad(kwad: Kwad, fuzz: phys.Fuzz) -> KwadPerformance:
 
     # Max thrust (full throttle at full voltage)
     max_thrust_per_motor = static_thrust(motor, prop, v_full, fuzz)
-    max_total = max_thrust_per_motor * len(kwad.motors)
+    max_total = max_thrust_per_motor * motor_count
 
     return KwadPerformance(
         hover_throttle=h_throttle,

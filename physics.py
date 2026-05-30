@@ -1,5 +1,5 @@
 """
-physics.py — diameter-aware, full realism pass
+physics.py — diameter-aware, final power/efficiency tuning
 """
 
 from __future__ import annotations
@@ -112,13 +112,13 @@ def _fm_for_diameter(diameter_in: float) -> float:
     """
     Figure of merit vs diameter:
     - Tiny props less efficient
-    - 5" around 0.22
+    - 5" around 0.26
     - Larger props slightly more efficient
     """
     d = _clamp_diameter_in(diameter_in)
-    fm_5 = 0.22
+    fm_5 = 0.26
     scale = (d / 5.0) ** 0.10
-    return max(0.18, min(0.28, fm_5 * scale))
+    return max(0.22, min(0.32, fm_5 * scale))
 
 
 def _motor_efficiency_for_load(load_fraction: float) -> float:
@@ -127,8 +127,8 @@ def _motor_efficiency_for_load(load_fraction: float) -> float:
     Peak around 0.4–0.6, softer at extremes.
     """
     x = max(0.0, min(1.0, load_fraction))
-    # Quadratic bump: ~0.7 at extremes, ~0.9 at mid-load
-    return 0.7 + 0.2 * (1.0 - (2.0 * x - 1.0) ** 2)
+    # Quadratic bump: ~0.75 at extremes, ~0.92 at mid-load
+    return 0.75 + 0.17 * (1.0 - (2.0 * x - 1.0) ** 2)
 
 
 # ============================================================
@@ -218,11 +218,11 @@ def prop_power_from_thrust(
     power = p_i / fm
 
     # Very mild blade penalty so 3-blade whoops don't blow up power
-    blade_loss_factor = 1.0 + 0.03 * (blades - 2)
+    blade_loss_factor = 1.0 + 0.01 * (blades - 2)
     power *= blade_loss_factor
 
-    # Small non-ideal losses
-    power *= 1.03
+    # Tiny non-ideal losses
+    power *= 1.01
 
     return power
 
